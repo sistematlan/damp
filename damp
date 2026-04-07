@@ -1,0 +1,219 @@
+#!/bin/bash
+# =============================================================
+#  DAMP — Docker + Auto-TLS + MySQL + PHP
+#  A modern replacement for MAMP, XAMPP, WAMP, and LAMP.
+# =============================================================
+set -euo pipefail
+
+DAMP_DIR="$(cd "$(dirname "$0")" && pwd)"
+GREEN="\033[0;32m"
+YELLOW="\033[0;33m"
+RED="\033[0;31m"
+BOLD="\033[1m"
+DIM="\033[2m"
+NC="\033[0m"
+
+cd "$DAMP_DIR"
+
+case "${1:-help}" in
+
+  # ── Start ────────────────────────────────────────────────────
+  up)
+    echo -e "${GREEN}Starting DAMP...${NC}"
+    docker compose up -d
+    echo -e "${GREEN}DAMP is running.${NC}"
+    echo ""
+    echo -e "  PHPMyAdmin  → ${BOLD}http://localhost:${PMA_PORT:-8080}${NC}"
+    echo -e "  Mailpit     → ${BOLD}http://localhost:${MAIL_HTTP_PORT:-8025}${NC}"
+    echo -e "  MySQL       → ${BOLD}localhost:${DB_PORT:-3306}${NC}"
+    ;;
+
+  # ── Stop ─────────────────────────────────────────────────────
+  down)
+    echo -e "${YELLOW}Stopping DAMP...${NC}"
+    docker compose down
+    echo -e "${YELLOW}DAMP stopped.${NC}"
+    ;;
+
+  # ── Restart ──────────────────────────────────────────────────
+  restart)
+    docker compose restart
+    echo -e "${GREEN}DAMP restarted.${NC}"
+    ;;
+
+  # ── Status ───────────────────────────────────────────────────
+  status)
+    echo -e "${BOLD}DAMP Services:${NC}"
+    docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null
+    echo ""
+    echo -e "${BOLD}Projects on damp network:${NC}"
+    docker network inspect damp --format '{{range .Containers}}  {{.Name}}{{"\n"}}{{end}}' 2>/dev/null | sort
+    ;;
+
+  # ── Logs ─────────────────────────────────────────────────────
+  logs)
+    service="${2:-}"
+    if [ -z "$service" ]; then
+      docker compose logs -f --tail 50
+    else
+      docker compose logs -f --tail 50 "$service"
+    fi
+    ;;
+
+  # ── Add domain to /etc/hosts ─────────────────────────────────
+  add-host)
+    domain="${2:-}"
+    if [ -z "$domain" ]; then
+      echo "Usage: damp add-host my-project.local"
+      exit 1
+    fi
+    if grep -q "127.0.0.1.*$domain" /etc/hosts 2>/dev/null; then
+      echo -e "${YELLOW}$domain already exists in /etc/hosts${NC}"
+    else
+      sudo sh -c "echo '127.0.0.1   $domain' >> /etc/hosts"
+      echo -e "${GREEN}$domain added to /etc/hosts${NC}"
+    fi
+    ;;
+
+  # ── Create database ──────────────────────────────────────────
+  create-db)
+    dbname="${2:-}"
+    if [ -z "$dbname" ]; then
+      echo "Usage: damp create-db my_project_db"
+      exit 1
+    fi
+    docker exec damp-db mysql -uroot -p"${DB_ROOT_PASSWORD:-root}" \
+      -e "CREATE DATABASE IF NOT EXISTS \`$dbname\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+    echo -e "${GREEN}Database '$dbname' created.${NC}"
+    ;;
+
+  # ── List databases ───────────────────────────────────────────
+  databases)
+    docker exec damp-db mysql -uroot -p"${DB_ROOT_PASSWORD:-root}" \
+      -e "SHOW DATABASES;" 2>/dev/null | grep -v "information_schema\|performance_schema\|mysql\|sys\|Database"
+    ;;
+
+  # ── Import SQL dump ──────────────────────────────────────────
+  import)
+    dbname="${2:-}"
+    sqlfile="${3:-}"
+    if [ -z "$dbname" ] || [ -z "$sqlfile" ]; then
+      echo "Usage: damp import my_db dump.sql"
+      exit 1
+    fi
+    if [ ! -f "$sqlfile" ]; then
+      echo -e "${RED}File not found: $sqlfile${NC}"
+      exit 1
+    fi
+    docker exec -i damp-db mysql -uroot -p"${DB_ROOT_PASSWORD:-root}" "$dbname" < "$sqlfile" 2>/dev/null
+    echo -e "${GREEN}Imported '$sqlfile' → '$dbname'${NC}"
+    ;;
+
+  # ── Export SQL dump ──────────────────────────────────────────
+  export)
+    dbname="${2:-}"
+    outfile="${3:-$dbname-$(date +%Y%m%d).sql}"
+    if [ -z "$dbname" ]; then
+      echo "Usage: damp export my_db [file.sql]"
+      exit 1
+    fi
+    docker exec damp-db mysqldump -uroot -p"${DB_ROOT_PASSWORD:-root}" --single-transaction "$dbname" > "$outfile" 2>/dev/null
+    echo -e "${GREEN}Exported '$dbname' → '$outfile'${NC}"
+    ;;
+
+  # ── Drop database ────────────────────────────────────────────
+  drop-db)
+    dbname="${2:-}"
+    if [ -z "$dbname" ]; then
+      echo "Usage: damp drop-db my_db"
+      exit 1
+    fi
+    echo -e "${RED}This will permanently delete '$dbname'. Are you sure? [y/N]${NC}"
+    read -r confirm
+    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+      docker exec damp-db mysql -uroot -p"${DB_ROOT_PASSWORD:-root}" \
+        -e "DROP DATABASE IF EXISTS \`$dbname\`;" 2>/dev/null
+      echo -e "${GREEN}Database '$dbname' dropped.${NC}"
+    else
+      echo "Cancelled."
+    fi
+    ;;
+
+  # ── Install CA ───────────────────────────────────────────────
+  trust)
+    bash "$DAMP_DIR/trust-cert.sh"
+    ;;
+
+  # ── Reload Caddy ─────────────────────────────────────────────
+  reload)
+    docker compose up -d caddy --force-recreate
+    echo -e "${GREEN}Caddy reloaded.${NC}"
+    ;;
+
+  # ── New project from template ────────────────────────────────
+  new)
+    template="${2:-}"
+    project="${3:-}"
+    if [ -z "$template" ] || [ -z "$project" ]; then
+      echo "Usage: damp new <template> <project-name>"
+      echo ""
+      echo "Available templates:"
+      ls -1 "$DAMP_DIR/templates/"
+      exit 1
+    fi
+    if [ ! -d "$DAMP_DIR/templates/$template" ]; then
+      echo -e "${RED}Template '$template' not found.${NC}"
+      echo "Available: $(ls -1 "$DAMP_DIR/templates/" | tr '\n' ' ')"
+      exit 1
+    fi
+
+    target="$(pwd)/$project"
+    mkdir -p "$target"
+    cp -r "$DAMP_DIR/templates/$template/"* "$target/"
+
+    # Replace PROJECT_NAME
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      find "$target" -type f -exec sed -i '' "s/PROJECT_NAME/$project/g" {} +
+    else
+      find "$target" -type f -exec sed -i "s/PROJECT_NAME/$project/g" {} +
+    fi
+
+    echo -e "${GREEN}Project '$project' created at $target${NC}"
+    echo ""
+    echo "Next steps:"
+    echo "  1. cd $project"
+    echo "  2. Add ${project}.local to DAMP's .env and Caddyfile"
+    echo "  3. damp add-host ${project}.local"
+    echo "  4. docker compose up -d"
+    ;;
+
+  # ── Help ─────────────────────────────────────────────────────
+  help|*)
+    echo -e "${BOLD}DAMP${NC} — Docker + Auto-TLS + MySQL + PHP"
+    echo -e "${DIM}A modern replacement for MAMP, XAMPP, WAMP, and LAMP.${NC}"
+    echo ""
+    echo -e "${BOLD}Usage:${NC} damp <command> [args]"
+    echo ""
+    echo -e "${BOLD}Services:${NC}"
+    echo "  up              Start DAMP"
+    echo "  down            Stop DAMP"
+    echo "  restart         Restart DAMP"
+    echo "  status          Show service status"
+    echo "  logs [svc]      View logs (optional: specific service)"
+    echo "  reload          Reload Caddy (after changing Caddyfile)"
+    echo ""
+    echo -e "${BOLD}Database:${NC}"
+    echo "  databases       List databases"
+    echo "  create-db <db>  Create a database"
+    echo "  drop-db <db>    Drop a database (with confirmation)"
+    echo "  import <db> <f> Import SQL dump"
+    echo "  export <db> [f] Export SQL dump"
+    echo ""
+    echo -e "${BOLD}Projects:${NC}"
+    echo "  new <tpl> <name>  Create project from template"
+    echo "  add-host <domain> Add domain to /etc/hosts"
+    echo ""
+    echo -e "${BOLD}SSL:${NC}"
+    echo "  trust           Install CA in system keychain (HTTPS without warnings)"
+    ;;
+esac

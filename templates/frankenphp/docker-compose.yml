@@ -1,0 +1,34 @@
+# =============================================================
+# DAMP Template: FrankenPHP (PHP 8.4)
+# =============================================================
+# For modern projects: CodeIgniter 4, Laravel 11+, Symfony 7
+#
+# Usage:
+#   1. Copy this directory to your project
+#   2. Replace PROJECT_NAME with your project name
+#   3. Add your domain to the DAMP Caddyfile
+#   4. docker compose up -d
+# =============================================================
+
+services:
+  app:
+    build: .
+    container_name: PROJECT_NAME-app
+    environment:
+      - CI_ENVIRONMENT=development
+      - database.default.hostname=damp-db
+      - database.default.database=PROJECT_NAME_db
+      - database.default.username=root
+      - database.default.password=root
+      - database.default.DBDriver=MySQLi
+      - database.default.port=3306
+    volumes:
+      - ./:/app
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    restart: unless-stopped
+    networks:
+      - damp
+
+networks:
+  damp:
+    external: true

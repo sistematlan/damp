@@ -1,0 +1,30 @@
+# Environment (contains local config)
+.env
+
+# Caddy generated certs
+caddy/*.crt
+caddy/*.key
+caddy/*.pem
+
+# Project overrides (personal, not shared)
+caddy/projects.d/*.caddy
+!caddy/projects.d/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# App build artifacts
+app/node_modules/
+app/dist/
+app/src-tauri/target/
+
+# SQL dumps
+*.sql.gz
+backups/

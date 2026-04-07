@@ -1,0 +1,34 @@
+# =============================================================
+# DAMP — Global Reverse Proxy
+# =============================================================
+# Each *.local domain gets automatic HTTPS.
+# To add a project:
+#   1. Add DOMAIN=name.local in .env
+#   2. Add a block here pointing to the container:port
+#   3. Run: damp reload
+# =============================================================
+{
+    email {$CADDY_EMAIL:admin@localhost}
+}
+
+# ── PHPMyAdmin ──────────────────────────────────────────────
+{$PMA_DOMAIN} {
+    reverse_proxy damp-phpmyadmin:80
+}
+
+# ── Mailpit ─────────────────────────────────────────────────
+{$MAIL_DOMAIN} {
+    reverse_proxy damp-mailpit:8025
+}
+
+# ╔═══════════════════════════════════════════════════════════╗
+# ║  PROJECTS                                                ║
+# ╚═══════════════════════════════════════════════════════════╝
+# Add your project blocks below. Example:
+#
+# {$MY_PROJECT_DOMAIN} {
+#     reverse_proxy my-project-app:80
+# }
+
+# Import local overrides (optional, gitignored)
+import /etc/caddy/projects.d/*.caddy

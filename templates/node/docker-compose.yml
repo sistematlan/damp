@@ -1,0 +1,25 @@
+# =============================================================
+# DAMP Template: Node.js
+# =============================================================
+# For: React, Vue, Astro, Next.js, Express, etc.
+# Change version: node:20-alpine, node:18-alpine, etc.
+# Adjust the command for your framework.
+# =============================================================
+
+services:
+  app:
+    image: node:22-alpine
+    container_name: PROJECT_NAME-app
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: sh -c "npm install && npm run dev -- --host"
+    environment:
+      - NODE_ENV=development
+    restart: unless-stopped
+    networks:
+      - damp
+
+networks:
+  damp:
+    external: true

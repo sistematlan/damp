@@ -1,0 +1,20 @@
+{
+	auto_https disable_redirects
+	http_port 80
+}
+
+http://:80 {
+	root * /app/public
+	php_server
+
+	@notStatic {
+		not file
+		not path *.ico *.css *.js *.gif *.jpg *.jpeg *.png *.svg *.woff *.woff2 *.ttf *.eot
+	}
+	rewrite @notStatic /index.php?{query}
+
+	log {
+		output stdout
+		format console
+	}
+}

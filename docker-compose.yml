@@ -1,0 +1,84 @@
+services:
+  # ── Reverse Proxy ─────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: damp-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/projects.d:/etc/caddy/projects.d:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    env_file:
+      - .env
+    networks:
+      - damp
+    restart: unless-stopped
+
+  # ── MySQL ────────────────────────────────────────────────────
+  db:
+    image: mysql:8.4
+    container_name: damp-db
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/Mexico_City}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init-databases.sql:/docker-entrypoint-initdb.d/01-databases.sql:ro
+    networks:
+      - damp
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── PHPMyAdmin ──────────────────────────────────────────────
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: damp-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      UPLOAD_LIMIT: 512M
+    ports:
+      - "${PMA_PORT:-8080}:80"
+    networks:
+      - damp
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ── Mailpit (SMTP de desarrollo) ─────────────────────────────
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: damp-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAIL_HTTP_PORT:-8025}:8025"
+      - "${MAIL_SMTP_PORT:-1025}:1025"
+    environment:
+      TZ: ${TZ:-America/Mexico_City}
+    networks:
+      - damp
+
+networks:
+  damp:
+    name: damp
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+  caddy_logs:
+  mysql_data:
