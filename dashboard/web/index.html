@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DAMP</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="icon" href="/favicon.svg">
+</head>
+<body>
+  <div class="app">
+    <nav class="sidebar">
+      <div class="sidebar-brand">DAMP</div>
+      <a href="#/" class="nav-item active" data-view="overview">
+        <span class="nav-icon">&#9673;</span> Overview
+      </a>
+      <a href="#/projects" class="nav-item" data-view="projects">
+        <span class="nav-icon">&#9881;</span> Projects
+      </a>
+      <a href="#/databases" class="nav-item" data-view="databases">
+        <span class="nav-icon">&#9707;</span> Databases
+      </a>
+      <a href="#/logs" class="nav-item" data-view="logs">
+        <span class="nav-icon">&#9783;</span> Logs
+      </a>
+      <div class="sidebar-footer">
+        <div class="sidebar-links">
+          <a href="http://localhost:8080" target="_blank" class="sidebar-link">PHPMyAdmin</a>
+          <a href="http://localhost:8025" target="_blank" class="sidebar-link">Mailpit</a>
+        </div>
+        <div class="sidebar-version">DAMP v1.0.0</div>
+      </div>
+    </nav>
+
+    <main>
+      <div class="topbar">
+        <div class="topbar-title" id="page-title">Overview</div>
+        <div class="topbar-status" id="status-indicator">
+          <span class="dot running"></span>
+          <span id="container-count">0 containers</span>
+        </div>
+      </div>
+      <div class="content" id="view"></div>
+    </main>
+  </div>
+
+  <script src="/js/views/overview.js"></script>
+  <script src="/js/views/projects.js"></script>
+  <script src="/js/views/databases.js"></script>
+  <script src="/js/views/logs.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

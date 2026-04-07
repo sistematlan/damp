@@ -72,6 +72,26 @@ services:
     networks:
       - damp
 
+  # ── Dashboard ────────────────────────────────────────────────
+  dashboard:
+    build: ./dashboard
+    container_name: damp-dashboard
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_PORT:-9000}:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/damp:ro
+    environment:
+      DAMP_DIR: /damp
+      DB_HOST: damp-db
+      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+    networks:
+      - damp
+    depends_on:
+      db:
+        condition: service_healthy
+
 networks:
   damp:
     name: damp
