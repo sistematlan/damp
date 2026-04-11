@@ -19,6 +19,20 @@ services:
       - damp
     restart: unless-stopped
 
+  # ── DNS Resolver (Auto-DNS *.local) ──────────────────────────
+  dns:
+    image: andyshinn/dnsmasq:latest
+    container_name: damp-dns
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+    command: -A /local/127.0.0.1 --log-facility=-
+    restart: unless-stopped
+    networks:
+      - damp
+
   # ── MySQL ────────────────────────────────────────────────────
   db:
     image: mysql:8.4
@@ -40,6 +54,41 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  # ── PostgreSQL ───────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: damp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - damp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: damp-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - damp
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ── PHPMyAdmin ──────────────────────────────────────────────
   phpmyadmin:
@@ -102,3 +151,4 @@ volumes:
   caddy_config:
   caddy_logs:
   mysql_data:
+  postgres_data:
