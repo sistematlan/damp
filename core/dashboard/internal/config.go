@@ -20,6 +20,45 @@ func NewConfigClient(dampDir string) *ConfigClient {
 	return &ConfigClient{dampDir: dampDir}
 }
 
+type ProjectInfo struct {
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Template string `json:"template"`
+}
+
+func (c *ConfigClient) ListProjects() ([]ProjectInfo, error) {
+	home, _ := os.UserHomeDir()
+	registryPath := filepath.Join(home, ".damp", "projects.json")
+
+	if _, err := os.Stat(registryPath); os.IsNotExist(err) {
+		return []ProjectInfo{}, nil
+	}
+
+	data, err := os.ReadFile(registryPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var projects []ProjectInfo
+	if err := json.Unmarshal(data, &projects); err != nil {
+		return nil, err
+	}
+	return projects, nil
+}
+
+func HandleProjects(w http.ResponseWriter, r *http.Request, cc *ConfigClient) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	projects, err := cc.ListProjects()
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, projects)
+}
+
 func (c *ConfigClient) ListTemplates() ([]TemplateInfo, error) {
 	dir := filepath.Join(c.dampDir, "templates")
 	entries, err := os.ReadDir(dir)

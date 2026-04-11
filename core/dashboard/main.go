@@ -62,6 +62,9 @@ func main() {
 	mux.HandleFunc("/api/templates", func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleTemplates(w, r, configClient)
 	})
+	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
+		internal.HandleProjects(w, r, configClient)
+	})
 	mux.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleSSEEvents(w, r, dockerClient)
 	})
