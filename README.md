@@ -7,11 +7,12 @@ A modern, open-source replacement for MAMP, XAMPP, WAMP, and LAMP. One command t
 ## What you get
 
 - **Caddy** — Reverse proxy with automatic HTTPS for `*.local` domains
-- **MySQL 8.4** — Shared database server for all your projects
+- **MySQL 8.4 & PostgreSQL 16** — Shared database servers
+- **Redis 7** — Local cache and session storage
 - **PHPMyAdmin** — Database management UI
 - **Mailpit** — Catch-all SMTP server for development email testing
-- **Project templates** — Start new projects in seconds (PHP 8.4, 7.4, 5.6, Node.js)
-- **Desktop app** — Native macOS app to manage everything (Tauri + React)
+- **Project templates** — Start new projects in seconds (WordPress, PHP 8.4, 7.4, 5.6, Node.js)
+- **Desktop app** — Native macOS app with System Tray integration
 
 ## Requirements
 
@@ -35,6 +36,8 @@ That's it. DAMP is running.
 | PHPMyAdmin  | http://localhost:8080         | —                    |
 | Mailpit     | http://localhost:8025         | damp-mailpit:1025    |
 | MySQL       | localhost:3306 (root/root)   | damp-db:3306         |
+| PostgreSQL  | localhost:5432 (root/root)   | damp-postgres:5432   |
+| Redis       | localhost:6379               | damp-redis:6379      |
 
 With HTTPS (after `./damp trust`):
 
@@ -62,11 +65,12 @@ With HTTPS (after `./damp trust`):
 ./damp export mydb           # Export SQL
 
 # Projects
-./damp new frankenphp my-project   # Create from template
-./damp add-host my-project.local   # Add to /etc/hosts
+./damp new wordpress my-site       # Create from template
+./damp exec my-site                # Enter project container
 
-# SSL
+# SSL & DNS
 ./damp trust         # Install CA (HTTPS without warnings)
+./damp setup-dns     # Configure auto-DNS for *.local (macOS)
 ./damp reload        # Reload Caddy after config changes
 ```
 
@@ -96,6 +100,7 @@ docker compose up -d
 
 | Template      | Stack                    | Use case                              |
 |---------------|--------------------------|---------------------------------------|
+| `wordpress`   | WordPress + MySQL        | Blogs, CMS                            |
 | `frankenphp`  | PHP 8.4 + FrankenPHP     | CodeIgniter 4, Laravel 11+, Symfony 7 |
 | `php-fpm`     | PHP 8.4 + Nginx + FPM   | CI4, Laravel, WordPress, Symfony      |
 | `php-legacy`  | PHP 7.4 + Nginx + FPM   | CodeIgniter 3, Laravel 8              |
