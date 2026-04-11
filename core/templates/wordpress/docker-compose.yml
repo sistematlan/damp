@@ -1,0 +1,30 @@
+# =============================================================
+# DAMP Template: WordPress
+# =============================================================
+# Modern WordPress project using the official image
+#
+# Usage:
+#   1. Copy this directory to your project
+#   2. Replace PROJECT_NAME with your project name
+#   3. Add your domain to the DAMP Caddyfile
+#   4. docker compose up -d
+# =============================================================
+
+services:
+  app:
+    image: wordpress:latest
+    container_name: PROJECT_NAME-app
+    restart: unless-stopped
+    environment:
+      WORDPRESS_DB_HOST: damp-db
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: root
+      WORDPRESS_DB_NAME: PROJECT_NAME_db
+    volumes:
+      - ./wp-content:/var/www/html/wp-content
+    networks:
+      - damp
+
+networks:
+  damp:
+    external: true
