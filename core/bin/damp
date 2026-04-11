@@ -14,6 +14,8 @@ while [ -h "$SOURCE" ]; do
 done
 BIN_DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 DAMP_CORE_DIR="$(cd "$BIN_DIR/.." && pwd)"
+DAMP_ROOT_DIR="$(cd "$DAMP_CORE_DIR/.." && pwd)"
+DAMP_VERSION="$(cat "$DAMP_ROOT_DIR/VERSION" 2>/dev/null || echo "unknown")"
 
 GREEN="\033[0;32m"
 YELLOW="\033[0;33m"
@@ -154,6 +156,11 @@ case "${1:-help}" in
     bash "$BIN_DIR/setup-dns.sh"
     ;;
 
+  # ── Version ──────────────────────────────────────────────────
+  version|--version|-v)
+    echo "damp $DAMP_VERSION"
+    ;;
+
   # ── Install CA ───────────────────────────────────────────────
   trust)
     bash "$BIN_DIR/trust-cert.sh"
@@ -222,7 +229,7 @@ case "${1:-help}" in
 
   # ── Help ─────────────────────────────────────────────────────
   help|*)
-    echo -e "${BOLD}DAMP${NC} — Docker + Auto-TLS + MySQL + PHP"
+    echo -e "${BOLD}DAMP${NC} ${DIM}v$DAMP_VERSION${NC} — Docker + Auto-TLS + MySQL + PHP"
     echo -e "${DIM}A modern replacement for MAMP, XAMPP, WAMP, and LAMP.${NC}"
     echo ""
     echo -e "${BOLD}Usage:${NC} damp <command> [args]"
@@ -250,5 +257,9 @@ case "${1:-help}" in
     echo -e "${BOLD}SSL & DNS:${NC}"
     echo "  trust           Install CA in system keychain (HTTPS without warnings)"
     echo "  setup-dns       Configure host to resolve *.local without /etc/hosts"
+    echo ""
+    echo -e "${BOLD}Meta:${NC}"
+    echo "  version         Show DAMP version"
+    echo "  help            Show this help"
     ;;
 esac
