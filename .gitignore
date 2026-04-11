@@ -2,13 +2,13 @@
 .env
 
 # Caddy generated certs
-caddy/*.crt
-caddy/*.key
-caddy/*.pem
+core/caddy/*.crt
+core/caddy/*.key
+core/caddy/*.pem
 
 # Project overrides (personal, not shared)
-caddy/projects.d/*.caddy
-!caddy/projects.d/.gitkeep
+core/caddy/projects.d/*.caddy
+!core/caddy/projects.d/.gitkeep
 
 # OS files
 .DS_Store
@@ -20,11 +20,16 @@ Thumbs.db
 *.swp
 *.swo
 
-# App build artifacts
+# Desktop app build artifacts
 app/node_modules/
 app/dist/
 app/src-tauri/target/
 
-# SQL dumps
+# Dashboard build artifacts
+core/dashboard/tmp/
+core/dashboard/dashboard
+
+# SQL dumps and backups
 *.sql.gz
 backups/
+data/
