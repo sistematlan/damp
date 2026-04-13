@@ -215,7 +215,7 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 	// 3. Generate Caddy config
 	caddyDir := filepath.Join(c.dampDir, "caddy", "projects.d")
 	os.MkdirAll(caddyDir, 0755)
-	domain := name + ".local"
+	domain := name + "." + dampTLD()
 	caddyConfig := fmt.Sprintf("%s {\n    reverse_proxy %s-app:80\n}\n", domain, name)
 	caddyPath := filepath.Join(caddyDir, name+".caddy")
 	if err := os.WriteFile(caddyPath, []byte(caddyConfig), 0644); err != nil {
@@ -369,7 +369,7 @@ func (c *ConfigClient) ListProjectsFromCaddy(dc *DockerClient) ([]ProjectStatus,
 
 		projects = append(projects, ProjectStatus{
 			Name:   projectName,
-			Domain: projectName + ".local",
+			Domain: projectName + "." + dampTLD(),
 			Status: status,
 		})
 	}
@@ -429,6 +429,14 @@ func HandleDeleteProject(w http.ResponseWriter, r *http.Request, cc *ConfigClien
 type DirEntry struct {
 	Name  string `json:"name"`
 	IsDir bool   `json:"is_dir"`
+}
+
+func dampTLD() string {
+	tld := os.Getenv("DAMP_TLD")
+	if tld == "" {
+		return "test"
+	}
+	return tld
 }
 
 func hostHome() string {

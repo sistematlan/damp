@@ -27,6 +27,14 @@ NC="\033[0m"
 PROJECTS_DIR="$DAMP_CORE_DIR/caddy/projects.d"
 TEMPLATES_DIR="$DAMP_CORE_DIR/templates"
 
+# Load .env for DAMP_TLD and other settings
+if [ -f "$DAMP_CORE_DIR/.env" ]; then
+  set -a
+  source "$DAMP_CORE_DIR/.env"
+  set +a
+fi
+DAMP_TLD="${DAMP_TLD:-test}"
+
 # ── Detect project type from existing files ────────────────────
 detect_template() {
   local dir="$1"
@@ -94,7 +102,7 @@ select_template() {
 setup_project() {
   local project="$1"
   local target="$2"
-  local domain="${project}.local"
+  local domain="${project}.${DAMP_TLD}"
   local dbname="${project//-/_}_db"
 
   # 1. Create database
@@ -193,7 +201,7 @@ case "${1:-help}" in
   add-host)
     domain="${2:-}"
     if [ -z "$domain" ]; then
-      echo "Usage: damp add-host my-project.local"
+      echo "Usage: damp add-host my-project.${DAMP_TLD}"
       exit 1
     fi
     if grep -q "127.0.0.1.*$domain" /etc/hosts 2>/dev/null; then
@@ -464,7 +472,7 @@ case "${1:-help}" in
     printf "  %-20s %-25s %-10s\n" "───────────────────" "────────────────────────" "─────────"
     for caddy_file in "$PROJECTS_DIR"/*.caddy; do
       name="$(basename "$caddy_file" .caddy)"
-      domain="${name}.local"
+      domain="${name}.${DAMP_TLD}"
       status=$(docker ps --filter "name=^${name}-" --format "{{.Status}}" 2>/dev/null | head -1)
       if [ -n "$status" ]; then
         printf "  %-20s %-25s ${GREEN}%-10s${NC}\n" "$name" "$domain" "running"
