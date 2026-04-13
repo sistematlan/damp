@@ -8,6 +8,7 @@ core/caddy/*.pem
 
 # Project overrides (personal, not shared)
 core/caddy/projects.d/*.caddy
+core/caddy/projects.d/registry.json
 !core/caddy/projects.d/.gitkeep
 
 # OS files

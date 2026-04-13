@@ -116,10 +116,11 @@ function renderProjectRows(projects) {
         '<span class="btn btn-sm" style="opacity:0.4;">' + p.domain + '</span>' +
         '<button class="btn-icon danger" onclick="deleteProject(\'' + p.name + '\')" title="Delete" style="margin-left:4px;">&#128465;</button>';
     } else {
-      // "created" — config exists but no containers yet, needs CLI
+      // "created" — config exists but no containers yet
       statusLabel = 'pending';
       actions =
-        '<code style="font-size:11px;color:var(--green);background:var(--surface-alt);padding:2px 8px;border-radius:4px;">damp new ' + p.name + '</code>' +
+        '<button class="btn-icon" onclick="projectAction(\'' + p.name + '\',\'start\')" title="' + t('start') + '">&#9654;</button>' +
+        '<code style="font-size:11px;color:var(--text-muted);background:var(--surface-alt);padding:2px 8px;border-radius:4px;">damp new ' + p.name + '</code>' +
         '<button class="btn-icon danger" onclick="deleteProject(\'' + p.name + '\')" title="Delete" style="margin-left:4px;">&#128465;</button>';
     }
     return '<div class="container-row fade-in">' +
@@ -210,14 +211,13 @@ async function adoptProject() {
     var result = await api('/api/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name, template: templateSelect.value }),
+      body: JSON.stringify({ name: name, template: templateSelect.value, path: path }),
     });
 
     if (result.error) {
       statusEl.innerHTML = '<div style="color:var(--red);padding:8px 0;">' + t('error') + ': ' + result.error + '</div>';
     } else {
-      var pathNote = path ? '<br><span style="color:var(--text-muted);font-size:12px;">' +
-        t('scaffoldFiles') + ': <code style="color:var(--green);">cd ' + path + ' && docker compose up -d</code></span>' : '';
+      var pathNote = path ? '<br><span style="color:var(--text-muted);font-size:12px;">Path: <code>' + path + '</code></span>' : '';
       statusEl.innerHTML =
         '<div style="color:var(--green);padding:8px 0;">' +
           '&#10003; <strong>' + result.name + '</strong> &mdash; ' +

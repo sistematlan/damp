@@ -302,6 +302,60 @@ case "${1:-help}" in
     echo -e "${GREEN}Caddy reloaded.${NC}"
     ;;
 
+  # ── Start a project ──────────────────────────────────────────
+  start)
+    project="${2:-}"
+    if [ -z "$project" ]; then
+      echo "Usage: damp start <project-name>"
+      exit 1
+    fi
+    # Search for the project's docker-compose.yml in common locations
+    project_dir=""
+    search_paths=(
+      "$CALLER_DIR/$project"
+      "$CALLER_DIR"
+      "$DAMP_ROOT_DIR/$project"
+      "$(dirname "$DAMP_ROOT_DIR")/$project"
+    )
+    for sp in "${search_paths[@]}"; do
+      if [ -f "$sp/docker-compose.yml" ]; then
+        # Verify it's actually this project (container name matches)
+        if grep -q "${project}" "$sp/docker-compose.yml" 2>/dev/null; then
+          project_dir="$sp"
+          break
+        fi
+      fi
+    done
+
+    if [ -z "$project_dir" ]; then
+      echo -e "${RED}Cannot find docker-compose.yml for '$project'.${NC}"
+      echo -e "  ${DIM}Try: cd <project-folder> && docker compose up -d${NC}"
+      exit 1
+    fi
+
+    echo -e "${GREEN}Starting $project...${NC}"
+    (cd "$project_dir" && docker compose up -d)
+    echo -e "${GREEN}$project is running.${NC}"
+    ;;
+
+  # ── Stop a project ──────────────────────────────────────────
+  stop)
+    project="${2:-}"
+    if [ -z "$project" ]; then
+      echo "Usage: damp stop <project-name>"
+      exit 1
+    fi
+    # Stop all containers with this project prefix
+    containers=$(docker ps -q --filter "name=^${project}-" 2>/dev/null)
+    if [ -z "$containers" ]; then
+      echo -e "${YELLOW}No running containers found for '$project'.${NC}"
+      exit 0
+    fi
+    echo -e "${YELLOW}Stopping $project...${NC}"
+    docker stop $containers
+    echo -e "${YELLOW}$project stopped.${NC}"
+    ;;
+
   # ── Exec into project container ──────────────────────────────
   exec)
     project="${2:-}"
@@ -441,6 +495,8 @@ case "${1:-help}" in
     echo -e "${BOLD}Projects:${NC}"
     echo "  new <name>        Create project (interactive template selector)"
     echo "  new <tpl> <name>  Create project from specific template"
+    echo "  start <project>   Start a project's containers"
+    echo "  stop <project>    Stop a project's containers"
     echo "  list              List registered projects"
     echo "  add-host <domain> Add domain to /etc/hosts"
     echo ""
