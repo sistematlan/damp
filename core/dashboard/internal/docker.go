@@ -120,6 +120,36 @@ func (d *DockerClient) ListContainers(ctx context.Context) ([]ContainerInfo, err
 	return result, nil
 }
 
+// GetAllContainers returns ALL containers (running + stopped), not filtered by network
+func (d *DockerClient) GetAllContainers() ([]ContainerInfo, error) {
+	data, err := d.dockerGet("/containers/json?all=true")
+	if err != nil {
+		return nil, err
+	}
+
+	var rawContainers []struct {
+		Names  []string `json:"Names"`
+		State  string   `json:"State"`
+		Status string   `json:"Status"`
+		Image  string   `json:"Image"`
+	}
+	if err := json.Unmarshal(data, &rawContainers); err != nil {
+		return nil, err
+	}
+
+	var result []ContainerInfo
+	for _, c := range rawContainers {
+		name := strings.TrimPrefix(c.Names[0], "/")
+		result = append(result, ContainerInfo{
+			Name:   name,
+			Status: c.Status,
+			State:  c.State,
+			Image:  c.Image,
+		})
+	}
+	return result, nil
+}
+
 func (d *DockerClient) StartContainer(ctx context.Context, name string) error {
 	return d.dockerPost("/containers/" + name + "/start")
 }

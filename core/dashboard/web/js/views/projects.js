@@ -100,23 +100,33 @@ function renderProjectRows(projects) {
   }
   return projects.map(function(p) {
     var actions = '';
+    var statusClass = p.status === 'running' ? 'running' : 'stopped';
+    var statusLabel = p.status;
+
     if (p.status === 'running') {
       actions =
         '<button class="btn-icon danger" onclick="projectAction(\'' + p.name + '\',\'stop\')" title="' + t('stop') + '">&#9632;</button>' +
         '<button class="btn-icon" onclick="projectAction(\'' + p.name + '\',\'restart\')" title="Restart">&#8635;</button>' +
         '<a href="https://' + p.domain + '" target="_blank" class="btn btn-sm" style="text-decoration:none;margin-left:4px;">' + p.domain + ' &#8594;</a>' +
         '<button class="btn-icon danger" onclick="deleteProject(\'' + p.name + '\')" title="Delete" style="margin-left:4px;">&#128465;</button>';
-    } else {
+    } else if (p.status === 'stopped') {
+      // Containers exist but are stopped — can start
       actions =
         '<button class="btn-icon" onclick="projectAction(\'' + p.name + '\',\'start\')" title="' + t('start') + '">&#9654;</button>' +
         '<span class="btn btn-sm" style="opacity:0.4;">' + p.domain + '</span>' +
         '<button class="btn-icon danger" onclick="deleteProject(\'' + p.name + '\')" title="Delete" style="margin-left:4px;">&#128465;</button>';
+    } else {
+      // "created" — config exists but no containers yet, needs CLI
+      statusLabel = 'pending';
+      actions =
+        '<code style="font-size:11px;color:var(--green);background:var(--surface-alt);padding:2px 8px;border-radius:4px;">damp new ' + p.name + '</code>' +
+        '<button class="btn-icon danger" onclick="deleteProject(\'' + p.name + '\')" title="Delete" style="margin-left:4px;">&#128465;</button>';
     }
     return '<div class="container-row fade-in">' +
       '<div class="container-info">' +
-        '<span class="dot ' + p.status + '"></span>' +
+        '<span class="dot ' + statusClass + '"></span>' +
         '<span class="container-name">' + p.name + '</span>' +
-        '<span class="badge badge-' + p.status + '">' + p.status + '</span>' +
+        '<span class="badge badge-' + statusClass + '">' + statusLabel + '</span>' +
       '</div>' +
       '<div class="container-actions">' + actions + '</div>' +
     '</div>';

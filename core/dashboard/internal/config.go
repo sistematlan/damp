@@ -287,30 +287,33 @@ func (c *ConfigClient) ListProjectsFromCaddy(dc *DockerClient) ([]ProjectStatus,
 		return nil, err
 	}
 
-	// Get running containers for status check
-	runningContainers := make(map[string]bool)
+	// Get ALL containers (including stopped) for status check
+	// key: container name, value: state (running, exited, etc.)
+	allContainers := make(map[string]string)
 	if dc != nil {
-		ctx := context.Background()
-		containers, _ := dc.ListContainers(ctx)
-		for _, c := range containers {
-			runningContainers[c.Name] = c.State == "running"
+		data, _ := dc.GetAllContainers()
+		for _, c := range data {
+			allContainers[c.Name] = c.State
 		}
 	}
 
 	var projects []ProjectStatus
 	for _, entry := range entries {
 		name := entry.Name()
-		if !strings.HasSuffix(name, ".caddy") {
+		if !strings.HasSuffix(name, ".caddy") || name == "registry.json" {
 			continue
 		}
 		projectName := strings.TrimSuffix(name, ".caddy")
 
-		// Check if any container with this prefix is running
-		status := "stopped"
-		for containerName, isRunning := range runningContainers {
-			if strings.HasPrefix(containerName, projectName+"-") && isRunning {
-				status = "running"
-				break
+		// Check containers with this prefix
+		status := "created" // config exists but no containers
+		for containerName, state := range allContainers {
+			if strings.HasPrefix(containerName, projectName+"-") {
+				if state == "running" {
+					status = "running"
+					break
+				}
+				status = "stopped" // container exists but not running
 			}
 		}
 

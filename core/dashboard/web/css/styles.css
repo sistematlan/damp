@@ -283,6 +283,11 @@ main {
   color: var(--red);
 }
 
+.badge-pending {
+  background: rgba(234, 179, 8, 0.15);
+  color: var(--yellow);
+}
+
 .badge-damp {
   background: rgba(59, 130, 246, 0.15);
   color: var(--blue);
