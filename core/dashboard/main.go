@@ -74,6 +74,9 @@ func main() {
 	mux.HandleFunc("/api/redis", func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleRedis(w, r, redisHost)
 	})
+	mux.HandleFunc("/api/home", func(w http.ResponseWriter, r *http.Request) {
+		internal.HandleHomeDir(w, r)
+	})
 	mux.HandleFunc("/api/browse", func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleBrowse(w, r)
 	})

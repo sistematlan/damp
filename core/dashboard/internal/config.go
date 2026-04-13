@@ -234,7 +234,7 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 	if projectPath != "" {
 		// Ensure absolute path
 		if !filepath.IsAbs(projectPath) {
-			return nil, fmt.Errorf("path must be absolute (e.g. /Users/you/projects/%s)", name)
+			return nil, fmt.Errorf("path must be absolute (e.g. %s/projects/%s)", hostHome(), name)
 		}
 		os.MkdirAll(projectPath, 0755)
 
@@ -431,20 +431,37 @@ type DirEntry struct {
 	IsDir bool   `json:"is_dir"`
 }
 
+func hostHome() string {
+	h := os.Getenv("HOST_HOME")
+	if h != "" {
+		return h
+	}
+	h, _ = os.UserHomeDir()
+	return h
+}
+
+func HandleHomeDir(w http.ResponseWriter, r *http.Request) {
+	home := hostHome()
+	jsonResponse(w, map[string]string{"home": home, "parent": filepath.Dir(home)})
+}
+
 func HandleBrowse(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
+	home := hostHome()
 	dirPath := r.URL.Query().Get("path")
 	if dirPath == "" {
-		dirPath = "/Users"
+		dirPath = filepath.Dir(home) // e.g. /Users on macOS, /home on Linux
 	}
 
-	// Prevent traversal outside /Users
-	if !strings.HasPrefix(filepath.Clean(dirPath), "/Users") {
-		jsonError(w, "Access restricted to /Users", http.StatusForbidden)
+	// Prevent traversal outside home parent directory
+	homeParent := filepath.Dir(home)
+	cleanPath := filepath.Clean(dirPath)
+	if !strings.HasPrefix(cleanPath, homeParent) && !strings.HasPrefix(cleanPath, "/mnt") {
+		jsonError(w, "Access restricted", http.StatusForbidden)
 		return
 	}
 

@@ -59,15 +59,15 @@ if ! command -v docker &>/dev/null; then
     echo ""
     echo -e "  ${DIM}Alternative: Docker Desktop${NC}"
     echo -e "  ${DIM}→ https://docker.com/products/docker-desktop${NC}"
-    echo ""
-    echo -n "  Open OrbStack download page? [Y/n]: "
-    read -r open_orbstack
-    if [ "$open_orbstack" != "n" ] && [ "$open_orbstack" != "N" ]; then
-      open "https://orbstack.dev/download" 2>/dev/null || true
+  elif [ "$OS" = "linux" ]; then
+    if grep -qi microsoft /proc/version 2>/dev/null; then
+      echo -e "  ${BOLD}WSL2 detected.${NC} Install Docker Desktop for Windows:"
+      echo -e "  ${DIM}→ https://docker.com/products/docker-desktop${NC}"
+      echo -e "  ${DIM}Enable WSL2 integration in Docker Desktop settings.${NC}"
+    else
+      echo -e "  Install Docker Engine:"
+      echo -e "  ${DIM}→ https://docs.docker.com/engine/install/${NC}"
     fi
-  else
-    echo -e "  Install Docker Engine:"
-    echo -e "  ${DIM}→ https://docs.docker.com/engine/install/${NC}"
   fi
   echo ""
   echo -e "  Run ${BOLD}./install.sh${NC} again after installing Docker."
@@ -83,6 +83,12 @@ if ! docker info &>/dev/null; then
     elif [ -d "/Applications/Docker.app" ]; then
       echo -e "  ${DIM}Starting Docker Desktop...${NC}"
       open -a Docker
+    fi
+  elif [ "$OS" = "linux" ]; then
+    # Try starting Docker service on Linux
+    if command -v systemctl &>/dev/null; then
+      echo -e "  ${DIM}Trying to start Docker service...${NC}"
+      sudo systemctl start docker 2>/dev/null || true
     fi
   fi
   echo -e "  ${DIM}Waiting for Docker to be ready...${NC}"
@@ -161,13 +167,22 @@ fi
 # ── 6. DNS + hosts ────────────────────────────────────
 step "Configuring DNS..."
 
-# Try setup-dns first (eliminates need for /etc/hosts per project)
+# Try auto-DNS first (eliminates need for /etc/hosts per project)
 dns_configured=false
 if [ "$OS" = "macos" ]; then
   if sudo mkdir -p /etc/resolver 2>/dev/null && \
      sudo sh -c "echo 'nameserver 127.0.0.1' > /etc/resolver/local" 2>/dev/null; then
     dns_configured=true
     echo -e "${GREEN}  Auto-DNS configured — all *.local domains resolve automatically.${NC}"
+  fi
+elif [ "$OS" = "linux" ]; then
+  if command -v resolvectl &>/dev/null; then
+    if sudo mkdir -p /etc/systemd/resolved.conf.d 2>/dev/null && \
+       sudo sh -c 'echo -e "[Resolve]\nDNS=127.0.0.1\nDomains=~local" > /etc/systemd/resolved.conf.d/damp.conf' 2>/dev/null && \
+       sudo systemctl restart systemd-resolved 2>/dev/null; then
+      dns_configured=true
+      echo -e "${GREEN}  Auto-DNS configured via systemd-resolved.${NC}"
+    fi
   fi
 fi
 

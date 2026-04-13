@@ -43,7 +43,7 @@ async function renderProjects(el) {
           '<div class="input-group">' +
             '<input type="text" class="input" id="adopt-name" placeholder="my-project" style="max-width: 200px;">' +
             '<div style="display:flex;gap:4px;flex:1;align-items:center;">' +
-              '<input type="text" class="input" id="adopt-path" placeholder="/Users/you/projects/my-project" style="flex:1;" readonly>' +
+              '<input type="text" class="input" id="adopt-path" placeholder="/home/you/projects/my-project" style="flex:1;" readonly>' +
               '<button class="btn btn-sm" onclick="openFolderBrowser()" style="flex-shrink:0;">&#128193; Browse</button>' +
             '</div>' +
             '<select class="input" id="adopt-template" style="max-width: 220px;">' +
@@ -236,7 +236,11 @@ async function adoptProject() {
   btn.textContent = t('create');
 }
 
-function openFolderBrowser() {
+async function openFolderBrowser() {
+  // Get home directory from backend (works on any OS)
+  var homeData = await api('/api/home');
+  var startPath = homeData.parent || '/';
+
   var modal = document.createElement('div');
   modal.id = 'folder-modal';
   modal.innerHTML =
@@ -246,7 +250,7 @@ function openFolderBrowser() {
           '<span class="card-title">Select Folder</span>' +
           '<button class="btn-icon" onclick="closeFolderBrowser()">&times;</button>' +
         '</div>' +
-        '<div class="modal-path" id="browser-path">/Users</div>' +
+        '<div class="modal-path" id="browser-path">' + startPath + '</div>' +
         '<div class="modal-list" id="browser-list"><div class="loading">Loading...</div></div>' +
         '<div class="modal-footer">' +
           '<button class="btn" onclick="closeFolderBrowser()">Cancel</button>' +
@@ -255,7 +259,7 @@ function openFolderBrowser() {
       '</div>' +
     '</div>';
   document.body.appendChild(modal);
-  browseTo('/Users');
+  browseTo(startPath);
 }
 
 function closeFolderBrowser() {
@@ -277,8 +281,9 @@ async function browseTo(path) {
 
     var html = '';
     // Parent directory link
-    if (path !== '/Users') {
-      var parent = path.split('/').slice(0, -1).join('/') || '/Users';
+    var pathParts = path.split('/').filter(Boolean);
+    if (pathParts.length > 1) {
+      var parent = '/' + pathParts.slice(0, -1).join('/');
       html += '<div class="browser-item" onclick="browseTo(\'' + parent + '\')">' +
         '<span style="margin-right:8px;">&#128194;</span> ..' +
       '</div>';

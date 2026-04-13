@@ -11,7 +11,7 @@ A modern, open-source replacement for MAMP, XAMPP, WAMP, and LAMP.<br>
 One command to get a full local development environment with HTTPS, databases, email testing, and project templates.
 </p>
 
-> **Platform support:** macOS only (for now). Linux and Windows WSL2 support is planned.
+> **Platform support:** macOS fully supported. Linux and Windows WSL2 support added (testing welcome).
 
 ## What you get
 
@@ -26,8 +26,9 @@ One command to get a full local development environment with HTTPS, databases, e
 
 ## Requirements
 
-- **macOS 12+**
-- [OrbStack](https://orbstack.dev) (recommended) or [Docker Desktop](https://docker.com)
+- **macOS 12+** — [OrbStack](https://orbstack.dev) (recommended) or [Docker Desktop](https://docker.com)
+- **Linux** — [Docker Engine](https://docs.docker.com/engine/install/)
+- **Windows** — [Docker Desktop](https://docker.com) with WSL2 enabled
 
 ## Quick start
 
@@ -180,9 +181,9 @@ This pulls the latest code and rebuilds all services.
 
 | Platform | Status |
 |----------|--------|
-| macOS 12+ (Apple Silicon & Intel) | **Supported** |
-| Linux | Planned |
-| Windows (WSL2) | Planned |
+| macOS 12+ (Apple Silicon & Intel) | **Fully supported** |
+| Linux (Ubuntu, Fedora, Debian) | **Supported** (testing welcome) |
+| Windows (WSL2) | **Supported** (testing welcome) |
 
 ## License
 

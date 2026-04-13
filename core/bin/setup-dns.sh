@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================
 #  DAMP — Setup DNS Resolver for *.local
-#  Configures the host to use DAMP's local DNS server for .local
+#  Supports: macOS, Linux (systemd-resolved), WSL2
 # =============================================================
 set -euo pipefail
 
@@ -14,24 +14,66 @@ NC="\033[0m"
 echo -e "${BOLD}DAMP — DNS Resolver Setup${NC}"
 echo ""
 
+# ── macOS ──────────────────────────────────────────────
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  echo "Detected macOS..."
+  echo "Detected macOS."
   echo "Creating /etc/resolver/local (requires sudo)..."
   sudo mkdir -p /etc/resolver
   sudo sh -c "echo 'nameserver 127.0.0.1' > /etc/resolver/local"
-  echo -e "${GREEN}Done! macOS now uses 127.0.0.1 for all *.local domains.${NC}"
+  echo -e "${GREEN}Done! All *.local domains now resolve to 127.0.0.1.${NC}"
+
+# ── Linux ──────────────────────────────────────────────
 elif [[ "$OSTYPE" == "linux"* ]]; then
-  echo "Detected Linux..."
-  echo -e "${YELLOW}Automatic DNS setup for Linux is complex due to different managers.${NC}"
-  echo "Suggested manual steps (if using systemd-resolved):"
-  echo "  1. Add 'nameserver 127.0.0.1' to /etc/resolv.conf (as first entry)"
-  echo "  2. Or configure NetworkManager to use 127.0.0.1 for local domains."
+
+  # WSL2 detection
+  if grep -qi microsoft /proc/version 2>/dev/null; then
+    echo "Detected WSL2."
+    echo -e "${YELLOW}DNS in WSL2 is managed by Windows.${NC}"
+    echo ""
+    echo "Option 1 — Edit /etc/wsl.conf to prevent DNS override:"
+    echo "  [network]"
+    echo "  generateResolvConf = false"
+    echo ""
+    echo "Option 2 — Add entries to Windows hosts file:"
+    echo "  notepad C:\\Windows\\System32\\drivers\\etc\\hosts"
+    echo "  Add: 127.0.0.1  damp.local pma.local mail.local"
+    echo ""
+    echo "Option 3 — Use damp add-host for each project domain."
+
+  # systemd-resolved (Ubuntu 18+, Fedora, etc.)
+  elif command -v resolvectl &>/dev/null; then
+    echo "Detected systemd-resolved."
+    echo "Configuring *.local to resolve via DAMP DNS (requires sudo)..."
+    sudo mkdir -p /etc/systemd/resolved.conf.d
+    sudo sh -c 'cat > /etc/systemd/resolved.conf.d/damp.conf << CONF
+[Resolve]
+DNS=127.0.0.1
+Domains=~local
+CONF'
+    sudo systemctl restart systemd-resolved
+    echo -e "${GREEN}Done! All *.local domains now resolve via DAMP DNS.${NC}"
+
+  # NetworkManager (older systems)
+  elif command -v nmcli &>/dev/null; then
+    echo "Detected NetworkManager."
+    echo -e "${YELLOW}Automatic setup not supported for NetworkManager.${NC}"
+    echo "Add this to /etc/NetworkManager/dnsmasq.d/damp.conf:"
+    echo "  address=/.local/127.0.0.1"
+    echo "Then: sudo systemctl restart NetworkManager"
+
+  # Fallback
+  else
+    echo -e "${YELLOW}Could not detect DNS manager.${NC}"
+    echo "Add to /etc/resolv.conf:"
+    echo "  nameserver 127.0.0.1"
+    echo "Or use: damp add-host <domain> for each project."
+  fi
+
 else
-  echo -e "${RED}Unsupported OS for automatic DNS setup.${NC}"
+  echo -e "${RED}Unsupported OS: $OSTYPE${NC}"
   exit 1
 fi
 
 echo ""
-echo -e "${GREEN}DNS setup complete.${NC}"
-echo "Test it with: ping my-app.local"
-echo "(Note: DAMP container 'damp-dns' must be running on port 53)"
+echo "Test: ping my-project.local"
+echo "(DAMP container 'damp-dns' must be running on port 53)"
