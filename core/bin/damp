@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================
-#  DAMP — Docker + Auto-TLS + MySQL + PHP
+#  DAMP — Dockerized Auto-SSL Modern PHP
 #  A modern replacement for MAMP, XAMPP, WAMP, and LAMP.
 # =============================================================
 set -euo pipefail
@@ -405,7 +405,7 @@ case "${1:-help}" in
 
   # ── Help ─────────────────────────────────────────────────────
   help|*)
-    echo -e "${BOLD}DAMP${NC} ${DIM}v$DAMP_VERSION${NC} — Docker + Auto-TLS + MySQL + PHP"
+    echo -e "${BOLD}DAMP${NC} ${DIM}v$DAMP_VERSION${NC} — Dockerized Auto-SSL Modern PHP"
     echo -e "${DIM}A modern replacement for MAMP, XAMPP, WAMP, and LAMP.${NC}"
     echo ""
     echo -e "${BOLD}Usage:${NC} damp <command> [args]"

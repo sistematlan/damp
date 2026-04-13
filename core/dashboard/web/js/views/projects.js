@@ -42,7 +42,11 @@ async function renderProjects(el) {
           '</div>' +
           '<div class="input-group">' +
             '<input type="text" class="input" id="adopt-name" placeholder="my-project" style="max-width: 200px;">' +
-            '<input type="text" class="input" id="adopt-path" placeholder="/Users/you/projects/my-project">' +
+            '<div style="position:relative;flex:1;display:flex;">' +
+              '<input type="text" class="input" id="adopt-path" placeholder="/Users/you/projects/my-project" style="padding-right:36px;">' +
+              '<button class="btn-icon" onclick="document.getElementById(\'folder-picker\').click()" title="Browse" style="position:absolute;right:4px;top:4px;border:none;">&#128193;</button>' +
+              '<input type="file" id="folder-picker" webkitdirectory style="display:none;" onchange="onFolderPicked(this)">' +
+            '</div>' +
             '<select class="input" id="adopt-template" style="max-width: 220px;">' +
               (templates || []).map(function(tp) {
                 return '<option value="' + tp.name + '">' + tp.name + '</option>';
@@ -201,6 +205,26 @@ async function adoptProject() {
 
   btn.disabled = false;
   btn.textContent = t('create');
+}
+
+function onFolderPicked(input) {
+  if (!input.files || !input.files.length) return;
+  // webkitRelativePath gives "foldername/file.ext" — extract the folder name
+  var relativePath = input.files[0].webkitRelativePath || '';
+  var folderName = relativePath.split('/')[0] || '';
+  if (folderName) {
+    var nameInput = document.getElementById('adopt-name');
+    var pathInput = document.getElementById('adopt-path');
+    if (nameInput && !nameInput.value) {
+      nameInput.value = folderName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    }
+    if (pathInput) {
+      pathInput.value = folderName;
+      pathInput.placeholder = folderName + ' (selected)';
+    }
+  }
+  // Reset so same folder can be re-selected
+  input.value = '';
 }
 
 async function refreshProjectList() {

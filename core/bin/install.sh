@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================
 #  DAMP Installer
-#  Docker + Auto-TLS + MySQL + PHP
+#  Dockerized Auto-SSL Modern PHP
 # =============================================================
 set -euo pipefail
 
@@ -36,7 +36,7 @@ step() {
 # ── Header ─────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}  DAMP Installer${NC} ${DIM}v$(cat "$DAMP_ROOT/VERSION" 2>/dev/null || echo "0.2.0")${NC}"
-echo -e "  ${DIM}Docker + Auto-TLS + MySQL + PHP${NC}"
+echo -e "  ${DIM}Dockerized Auto-SSL Modern PHP${NC}"
 echo "  ────────────────────────────────────────"
 
 # ── Detect OS ──────────────────────────────────────────
