@@ -1,6 +1,10 @@
-# DAMP
+<p align="center">
+  <img src="docs/icon-192.png" alt="DAMP" width="120">
+</p>
 
-**Dockerized Auto-SSL Modern Platform**
+<h1 align="center">DAMP</h1>
+
+<p align="center"><strong>Dockerized Auto-SSL Modern Platform</strong></p>
 
 A modern, open-source replacement for MAMP, XAMPP, WAMP, and LAMP. One command to get a full local development environment with HTTPS, MySQL, email testing, and project templates.
 
