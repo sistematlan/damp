@@ -273,6 +273,18 @@ case "${1:-help}" in
     bash "$BIN_DIR/setup-dns.sh"
     ;;
 
+  # ── Update ───────────────────────────────────────────────────
+  update)
+    echo -e "${GREEN}Updating DAMP...${NC}"
+    cd "$DAMP_ROOT_DIR"
+    git pull origin main
+    echo -e "${DIM}Rebuilding dashboard...${NC}"
+    cd "$DAMP_CORE_DIR"
+    docker compose build dashboard
+    docker compose up -d --force-recreate
+    echo -e "${GREEN}DAMP updated to $(cat "$DAMP_ROOT_DIR/VERSION" 2>/dev/null || echo "latest").${NC}"
+    ;;
+
   # ── Version ──────────────────────────────────────────────────
   version|--version|-v)
     echo "damp $DAMP_VERSION"
@@ -437,6 +449,7 @@ case "${1:-help}" in
     echo "  setup-dns       Configure host to resolve *.local without /etc/hosts"
     echo ""
     echo -e "${BOLD}Meta:${NC}"
+    echo "  update          Pull latest version and rebuild"
     echo "  version         Show DAMP version"
     echo "  help            Show this help"
     ;;
