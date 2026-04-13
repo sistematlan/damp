@@ -116,6 +116,79 @@ func HandleTemplates(w http.ResponseWriter, r *http.Request, cc *ConfigClient) {
 type CreateProjectRequest struct {
 	Name     string `json:"name"`
 	Template string `json:"template"`
+	Path     string `json:"path"`
+}
+
+// ── Project registry (persists project paths) ────────────
+
+type ProjectEntry struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+func (c *ConfigClient) registryPath() string {
+	return filepath.Join(c.dampDir, "caddy", "projects.d", "registry.json")
+}
+
+func (c *ConfigClient) loadRegistry() ([]ProjectEntry, error) {
+	data, err := os.ReadFile(c.registryPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []ProjectEntry{}, nil
+		}
+		return nil, err
+	}
+	var entries []ProjectEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return []ProjectEntry{}, nil
+	}
+	return entries, nil
+}
+
+func (c *ConfigClient) saveRegistry(entries []ProjectEntry) error {
+	data, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(c.registryPath(), data, 0644)
+}
+
+func (c *ConfigClient) RegisterProject(name, path string) {
+	entries, _ := c.loadRegistry()
+	// Update if exists, append if new
+	found := false
+	for i, e := range entries {
+		if e.Name == name {
+			entries[i].Path = path
+			found = true
+			break
+		}
+	}
+	if !found {
+		entries = append(entries, ProjectEntry{Name: name, Path: path})
+	}
+	c.saveRegistry(entries)
+}
+
+func (c *ConfigClient) UnregisterProject(name string) {
+	entries, _ := c.loadRegistry()
+	var filtered []ProjectEntry
+	for _, e := range entries {
+		if e.Name != name {
+			filtered = append(filtered, e)
+		}
+	}
+	c.saveRegistry(filtered)
+}
+
+func (c *ConfigClient) GetProjectPath(name string) string {
+	entries, _ := c.loadRegistry()
+	for _, e := range entries {
+		if e.Name == name {
+			return e.Path
+		}
+	}
+	return ""
 }
 
 type CreateProjectResponse struct {
@@ -149,8 +222,11 @@ func (c *ConfigClient) CreateProject(name, template string, dbClient *DatabaseCl
 		return nil, fmt.Errorf("failed to write Caddy config: %w", err)
 	}
 
-	// 4. Reload Caddy via Docker API
+	// 4. Reload Caddy
 	exec.Command("docker", "compose", "up", "-d", "caddy", "--force-recreate").Run()
+
+	// 5. Register project path if provided
+	c.RegisterProject(name, "")
 
 	return &CreateProjectResponse{
 		Status:   "created",
@@ -185,6 +261,9 @@ func HandleCreateProject(w http.ResponseWriter, r *http.Request, cc *ConfigClien
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if req.Path != "" {
+		cc.RegisterProject(req.Name, req.Path)
 	}
 	jsonResponse(w, result)
 }
@@ -263,7 +342,10 @@ func (c *ConfigClient) DeleteProject(name string, dc *DockerClient, dbClient *Da
 		dbClient.DropDatabase(dbName)
 	}
 
-	// 4. Reload Caddy
+	// 4. Unregister
+	c.UnregisterProject(name)
+
+	// 5. Reload Caddy
 	exec.Command("docker", "compose", "up", "-d", "caddy", "--force-recreate").Run()
 
 	return nil

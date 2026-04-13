@@ -134,25 +134,35 @@ func (d *DockerClient) RestartContainer(ctx context.Context, name string) error 
 
 // Start/stop all containers matching a project prefix (e.g. "myproject-")
 func (d *DockerClient) ProjectAction(ctx context.Context, projectName string, action string) (int, error) {
-	containers, err := d.ListContainers(ctx)
+	// List ALL containers (including stopped) - not just damp network
+	data, err := d.dockerGet("/containers/json?all=true")
 	if err != nil {
+		return 0, err
+	}
+
+	var rawContainers []struct {
+		Names []string `json:"Names"`
+		State string   `json:"State"`
+	}
+	if err := json.Unmarshal(data, &rawContainers); err != nil {
 		return 0, err
 	}
 
 	prefix := projectName + "-"
 	affected := 0
-	for _, c := range containers {
-		if !strings.HasPrefix(c.Name, prefix) {
+	for _, rc := range rawContainers {
+		name := strings.TrimPrefix(rc.Names[0], "/")
+		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
 		var actionErr error
 		switch action {
 		case "start":
-			actionErr = d.StartContainer(ctx, c.Name)
+			actionErr = d.StartContainer(ctx, name)
 		case "stop":
-			actionErr = d.StopContainer(ctx, c.Name)
+			actionErr = d.StopContainer(ctx, name)
 		case "restart":
-			actionErr = d.RestartContainer(ctx, c.Name)
+			actionErr = d.RestartContainer(ctx, name)
 		}
 		if actionErr == nil {
 			affected++
