@@ -392,6 +392,12 @@ case "${1:-help}" in
     else
       # One arg: damp new <name> — detect or ask
       project="$arg1"
+    fi
+
+    # Normalize project name: lowercase, only a-z 0-9 hyphens
+    project=$(echo "$project" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/-\+/-/g' | sed 's/^-//;s/-$//')
+
+    if [ -z "$arg2" ]; then
       template=""
 
       target="$CALLER_DIR/$project"

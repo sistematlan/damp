@@ -42,10 +42,9 @@ async function renderProjects(el) {
           '</div>' +
           '<div class="input-group">' +
             '<input type="text" class="input" id="adopt-name" placeholder="my-project" style="max-width: 200px;">' +
-            '<div style="position:relative;flex:1;display:flex;">' +
-              '<input type="text" class="input" id="adopt-path" placeholder="/Users/you/projects/my-project" style="padding-right:36px;">' +
-              '<button class="btn-icon" onclick="document.getElementById(\'folder-picker\').click()" title="Browse" style="position:absolute;right:4px;top:4px;border:none;">&#128193;</button>' +
-              '<input type="file" id="folder-picker" webkitdirectory style="display:none;" onchange="onFolderPicked(this)">' +
+            '<div style="display:flex;gap:4px;flex:1;align-items:center;">' +
+              '<input type="text" class="input" id="adopt-path" placeholder="/Users/you/projects/my-project" style="flex:1;" readonly>' +
+              '<button class="btn btn-sm" onclick="openFolderBrowser()" style="flex-shrink:0;">&#128193; Browse</button>' +
             '</div>' +
             '<select class="input" id="adopt-template" style="max-width: 220px;">' +
               (templates || []).map(function(tp) {
@@ -217,13 +216,13 @@ async function adoptProject() {
     if (result.error) {
       statusEl.innerHTML = '<div style="color:var(--red);padding:8px 0;">' + t('error') + ': ' + result.error + '</div>';
     } else {
-      var pathNote = path ? '<br><span style="color:var(--text-muted);font-size:12px;">Path: <code>' + path + '</code></span>' : '';
+      var color = result.status === 'running' ? 'var(--green)' : result.status === 'error' ? 'var(--red)' : 'var(--yellow)';
       statusEl.innerHTML =
-        '<div style="color:var(--green);padding:8px 0;">' +
+        '<div style="color:' + color + ';padding:8px 0;">' +
           '&#10003; <strong>' + result.name + '</strong> &mdash; ' +
           '<a href="https://' + result.domain + '" target="_blank" style="color:var(--green);">' + result.domain + '</a>' +
           ' &middot; DB: <code>' + result.database + '</code>' +
-          pathNote +
+          '<br><span style="color:var(--text-muted);font-size:12px;">' + result.output + '</span>' +
         '</div>';
       nameInput.value = '';
       pathInput.value = '';
@@ -237,24 +236,88 @@ async function adoptProject() {
   btn.textContent = t('create');
 }
 
-function onFolderPicked(input) {
-  if (!input.files || !input.files.length) return;
-  // webkitRelativePath gives "foldername/file.ext" — extract the folder name
-  var relativePath = input.files[0].webkitRelativePath || '';
-  var folderName = relativePath.split('/')[0] || '';
-  if (folderName) {
-    var nameInput = document.getElementById('adopt-name');
-    var pathInput = document.getElementById('adopt-path');
-    if (nameInput && !nameInput.value) {
-      nameInput.value = folderName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+function openFolderBrowser() {
+  var modal = document.createElement('div');
+  modal.id = 'folder-modal';
+  modal.innerHTML =
+    '<div class="modal-overlay" onclick="closeFolderBrowser()">' +
+      '<div class="modal-content" onclick="event.stopPropagation()">' +
+        '<div class="modal-header">' +
+          '<span class="card-title">Select Folder</span>' +
+          '<button class="btn-icon" onclick="closeFolderBrowser()">&times;</button>' +
+        '</div>' +
+        '<div class="modal-path" id="browser-path">/Users</div>' +
+        '<div class="modal-list" id="browser-list"><div class="loading">Loading...</div></div>' +
+        '<div class="modal-footer">' +
+          '<button class="btn" onclick="closeFolderBrowser()">Cancel</button>' +
+          '<button class="btn btn-primary" onclick="selectCurrentFolder()">Select this folder</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+  browseTo('/Users');
+}
+
+function closeFolderBrowser() {
+  var modal = document.getElementById('folder-modal');
+  if (modal) modal.remove();
+}
+
+async function browseTo(path) {
+  var listEl = document.getElementById('browser-list');
+  var pathEl = document.getElementById('browser-path');
+  if (!listEl) return;
+
+  listEl.innerHTML = '<div class="loading">Loading...</div>';
+  pathEl.textContent = path;
+
+  try {
+    var data = await api('/api/browse?path=' + encodeURIComponent(path));
+    var entries = data.entries || [];
+
+    var html = '';
+    // Parent directory link
+    if (path !== '/Users') {
+      var parent = path.split('/').slice(0, -1).join('/') || '/Users';
+      html += '<div class="browser-item" onclick="browseTo(\'' + parent + '\')">' +
+        '<span style="margin-right:8px;">&#128194;</span> ..' +
+      '</div>';
     }
-    if (pathInput) {
-      pathInput.value = folderName;
-      pathInput.placeholder = folderName + ' (selected)';
+
+    if (entries.length === 0) {
+      html += '<div style="padding:12px;color:var(--text-muted);font-size:12px;">Empty directory</div>';
     }
+
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      var fullPath = path + '/' + e.name;
+      html += '<div class="browser-item" onclick="browseTo(\'' + fullPath + '\')">' +
+        '<span style="margin-right:8px;">&#128193;</span> ' + e.name +
+      '</div>';
+    }
+
+    listEl.innerHTML = html;
+  } catch (err) {
+    listEl.innerHTML = '<div style="padding:12px;color:var(--red);">Cannot read directory</div>';
   }
-  // Reset so same folder can be re-selected
-  input.value = '';
+}
+
+function selectCurrentFolder() {
+  var pathEl = document.getElementById('browser-path');
+  if (!pathEl) return;
+
+  var selectedPath = pathEl.textContent;
+  var folderName = selectedPath.split('/').pop();
+
+  var pathInput = document.getElementById('adopt-path');
+  var nameInput = document.getElementById('adopt-name');
+
+  if (pathInput) pathInput.value = selectedPath;
+  if (nameInput && !nameInput.value) {
+    nameInput.value = folderName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  }
+
+  closeFolderBrowser();
 }
 
 async function deleteProject(name) {

@@ -132,6 +132,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/damp:ro
       - ./caddy/projects.d:/damp/caddy/projects.d
+      - /Users:/Users
     environment:
       DAMP_DIR: /damp
       DB_HOST: damp-db

@@ -199,7 +199,7 @@ type CreateProjectResponse struct {
 	Output   string `json:"output"`
 }
 
-func (c *ConfigClient) CreateProject(name, template string, dbClient *DatabaseClient) (*CreateProjectResponse, error) {
+func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClient *DatabaseClient) (*CreateProjectResponse, error) {
 	// 1. Validate template exists
 	templateDir := filepath.Join(c.dampDir, "templates", template)
 	if _, err := os.Stat(templateDir); os.IsNotExist(err) {
@@ -212,7 +212,7 @@ func (c *ConfigClient) CreateProject(name, template string, dbClient *DatabaseCl
 		return nil, fmt.Errorf("failed to create database: %w", err)
 	}
 
-	// 3. Generate Caddy config in projects.d/
+	// 3. Generate Caddy config
 	caddyDir := filepath.Join(c.dampDir, "caddy", "projects.d")
 	os.MkdirAll(caddyDir, 0755)
 	domain := name + ".local"
@@ -223,17 +223,69 @@ func (c *ConfigClient) CreateProject(name, template string, dbClient *DatabaseCl
 	}
 
 	// 4. Reload Caddy
-	exec.Command("docker", "compose", "up", "-d", "caddy", "--force-recreate").Run()
+	cmd := exec.Command("docker", "compose", "up", "-d", "caddy", "--force-recreate")
+	cmd.Dir = c.dampDir
+	cmd.Run()
 
-	// 5. Register project path if provided
-	c.RegisterProject(name, "")
+	// 5. If path provided, scaffold + start
+	status := "pending"
+	output := fmt.Sprintf("Project '%s' registered. Run: damp new %s %s", name, template, name)
+
+	if projectPath != "" {
+		// Ensure absolute path
+		if !filepath.IsAbs(projectPath) {
+			return nil, fmt.Errorf("path must be absolute (e.g. /Users/you/projects/%s)", name)
+		}
+		os.MkdirAll(projectPath, 0755)
+
+		// Copy template files if no docker-compose.yml exists
+		composePath := filepath.Join(projectPath, "docker-compose.yml")
+		if _, err := os.Stat(composePath); os.IsNotExist(err) {
+			entries, readErr := os.ReadDir(templateDir)
+			if readErr != nil {
+				return nil, fmt.Errorf("failed to read template dir: %w", readErr)
+			}
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				srcPath := filepath.Join(templateDir, entry.Name())
+				dstPath := filepath.Join(projectPath, entry.Name())
+				data, err := os.ReadFile(srcPath)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read template file %s: %w", entry.Name(), err)
+				}
+				content := strings.ReplaceAll(string(data), "PROJECT_NAME", name)
+				if err := os.WriteFile(dstPath, []byte(content), 0644); err != nil {
+					return nil, fmt.Errorf("failed to write %s: %w", dstPath, err)
+				}
+			}
+		}
+
+		// Start containers — use --project-directory so Docker daemon
+		// resolves volume mounts relative to the host path
+		composeCmd := exec.Command("docker", "compose",
+			"--project-directory", projectPath,
+			"up", "-d", "--build")
+		composeCmd.Dir = projectPath
+		composeOut, err := composeCmd.CombinedOutput()
+		if err != nil {
+			status = "error"
+			output = fmt.Sprintf("Config created but failed to start: %s", string(composeOut))
+		} else {
+			status = "running"
+			output = fmt.Sprintf("Project '%s' is running at https://%s", name, domain)
+		}
+	}
+
+	c.RegisterProject(name, projectPath)
 
 	return &CreateProjectResponse{
-		Status:   "created",
+		Status:   status,
 		Name:     name,
 		Domain:   domain,
 		Database: dbName,
-		Output:   fmt.Sprintf("Project '%s' configured. Database: %s, Domain: %s", name, dbName, domain),
+		Output:   output,
 	}, nil
 }
 
@@ -252,18 +304,16 @@ func HandleCreateProject(w http.ResponseWriter, r *http.Request, cc *ConfigClien
 		jsonError(w, "name and template are required", http.StatusBadRequest)
 		return
 	}
-	if !validName.MatchString(req.Name) {
-		jsonError(w, "invalid name: use lowercase letters, numbers, and hyphens only", http.StatusBadRequest)
-		return
-	}
+	// Normalize: lowercase, replace spaces/underscores/special chars with hyphens
+	req.Name = strings.ToLower(req.Name)
+	req.Name = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(req.Name, "-")
+	req.Name = regexp.MustCompile(`-+`).ReplaceAllString(req.Name, "-")
+	req.Name = strings.Trim(req.Name, "-")
 
-	result, err := cc.CreateProject(req.Name, req.Template, dbClient)
+	result, err := cc.CreateProject(req.Name, req.Template, req.Path, dbClient)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-	if req.Path != "" {
-		cc.RegisterProject(req.Name, req.Path)
 	}
 	jsonResponse(w, result)
 }
@@ -372,6 +422,52 @@ func HandleDeleteProject(w http.ResponseWriter, r *http.Request, cc *ConfigClien
 		return
 	}
 	jsonResponse(w, map[string]string{"status": "deleted", "name": name})
+}
+
+// ── Browse host filesystem ───────────────────────────────
+
+type DirEntry struct {
+	Name  string `json:"name"`
+	IsDir bool   `json:"is_dir"`
+}
+
+func HandleBrowse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	dirPath := r.URL.Query().Get("path")
+	if dirPath == "" {
+		dirPath = "/Users"
+	}
+
+	// Prevent traversal outside /Users
+	if !strings.HasPrefix(filepath.Clean(dirPath), "/Users") {
+		jsonError(w, "Access restricted to /Users", http.StatusForbidden)
+		return
+	}
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var dirs []DirEntry
+	for _, entry := range entries {
+		// Skip hidden directories
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		if entry.IsDir() {
+			dirs = append(dirs, DirEntry{Name: entry.Name(), IsDir: true})
+		}
+	}
+	jsonResponse(w, map[string]interface{}{
+		"path":    dirPath,
+		"entries": dirs,
+	})
 }
 
 // ── Engine controls ──────────────────────────────────────

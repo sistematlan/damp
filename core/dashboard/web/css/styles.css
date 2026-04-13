@@ -526,6 +526,70 @@ select.input:focus { border-color: var(--green); }
 
 .empty-icon { font-size: 32px; margin-bottom: 8px; }
 
+/* ── Folder Browser Modal ─────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 500px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-path {
+  padding: 8px 16px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--green);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  word-break: break-all;
+}
+
+.modal-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 400px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.browser-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+
+.browser-item:hover { background: var(--surface-hover); }
+.browser-item:last-child { border-bottom: none; }
+
 /* ── Animations ───────────────────────────────────── */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
