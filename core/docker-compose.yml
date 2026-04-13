@@ -28,7 +28,7 @@ services:
     ports:
       - "53:53/tcp"
       - "53:53/udp"
-    command: -A /${DAMP_TLD:-test}/127.0.0.1 --log-facility=-
+    command: -A /${DAMP_TLD:-local}/127.0.0.1 --log-facility=-
     restart: unless-stopped
     networks:
       - damp
@@ -135,7 +135,7 @@ services:
       - ${HOME}:${HOME}
     environment:
       DAMP_DIR: /damp
-      DAMP_TLD: ${DAMP_TLD:-test}
+      DAMP_TLD: ${DAMP_TLD:-local}
       HOST_HOME: ${HOME}
       DB_HOST: damp-db
       DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}

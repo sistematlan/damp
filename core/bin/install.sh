@@ -171,14 +171,14 @@ step "Configuring DNS..."
 dns_configured=false
 if [ "$OS" = "macos" ]; then
   if sudo mkdir -p /etc/resolver 2>/dev/null && \
-     sudo sh -c "echo 'nameserver 127.0.0.1' > /etc/resolver/${DAMP_TLD:-test}" 2>/dev/null; then
+     sudo sh -c "echo 'nameserver 127.0.0.1' > /etc/resolver/${DAMP_TLD:-local}" 2>/dev/null; then
     dns_configured=true
     echo -e "${GREEN}  Auto-DNS configured — all *.local domains resolve automatically.${NC}"
   fi
 elif [ "$OS" = "linux" ]; then
   if command -v resolvectl &>/dev/null; then
     if sudo mkdir -p /etc/systemd/resolved.conf.d 2>/dev/null && \
-       sudo sh -c "echo -e '[Resolve]\nDNS=127.0.0.1\nDomains=~${DAMP_TLD:-test}' > /etc/systemd/resolved.conf.d/damp.conf" 2>/dev/null && \
+       sudo sh -c "echo -e '[Resolve]\nDNS=127.0.0.1\nDomains=~${DAMP_TLD:-local}' > /etc/systemd/resolved.conf.d/damp.conf" 2>/dev/null && \
        sudo systemctl restart systemd-resolved 2>/dev/null; then
       dns_configured=true
       echo -e "${GREEN}  Auto-DNS configured via systemd-resolved.${NC}"
@@ -188,7 +188,7 @@ fi
 
 if [ "$dns_configured" = false ]; then
   echo -e "${DIM}  Auto-DNS not available. Adding domains to /etc/hosts...${NC}"
-  TLD="${DAMP_TLD:-test}"
+  TLD="${DAMP_TLD:-local}"
   domains=("damp.${TLD}" "pma.${TLD}" "mail.${TLD}")
   for domain in "${domains[@]}"; do
     if ! grep -q "127.0.0.1.*$domain" /etc/hosts 2>/dev/null; then
@@ -220,7 +220,7 @@ echo ""
 echo "  ────────────────────────────────────────"
 echo -e "${GREEN}${BOLD}  DAMP is ready!${NC}"
 echo ""
-TLD="${DAMP_TLD:-test}"
+TLD="${DAMP_TLD:-local}"
 echo -e "  ${BOLD}Services:${NC}"
 echo -e "    Dashboard   ${DIM}→${NC} ${BOLD}https://damp.${TLD}${NC}      ${DIM}http://localhost:9200${NC}"
 echo -e "    PHPMyAdmin  ${DIM}→${NC} ${BOLD}https://pma.${TLD}${NC}       ${DIM}http://localhost:8080${NC}"

@@ -33,7 +33,7 @@ if [ -f "$DAMP_CORE_DIR/.env" ]; then
   source "$DAMP_CORE_DIR/.env"
   set +a
 fi
-DAMP_TLD="${DAMP_TLD:-test}"
+DAMP_TLD="${DAMP_TLD:-local}"
 
 # ── Detect project type from existing files ────────────────────
 detect_template() {

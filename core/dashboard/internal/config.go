@@ -434,7 +434,7 @@ type DirEntry struct {
 func dampTLD() string {
 	tld := os.Getenv("DAMP_TLD")
 	if tld == "" {
-		return "test"
+		return "local"
 	}
 	return tld
 }
