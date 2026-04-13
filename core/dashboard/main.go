@@ -93,6 +93,13 @@ func main() {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		json.NewEncoder(w).Encode(projects)
 	})
+	mux.HandleFunc("/api/projects/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			internal.HandleDeleteProject(w, r, configClient, dockerClient, dbClient)
+			return
+		}
+		internal.HandleProjectAction(w, r, dockerClient)
+	})
 	mux.HandleFunc("/api/engine/", func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleEngine(w, r, configClient)
 	})

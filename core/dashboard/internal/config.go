@@ -244,6 +244,51 @@ func (c *ConfigClient) ListProjectsFromCaddy(dc *DockerClient) ([]ProjectStatus,
 	return projects, nil
 }
 
+// ── Delete project ───────────────────────────────────────
+
+func (c *ConfigClient) DeleteProject(name string, dc *DockerClient, dbClient *DatabaseClient) error {
+	// 1. Stop containers
+	if dc != nil {
+		ctx := context.Background()
+		dc.ProjectAction(ctx, name, "stop")
+	}
+
+	// 2. Remove Caddy config
+	caddyPath := filepath.Join(c.dampDir, "caddy", "projects.d", name+".caddy")
+	os.Remove(caddyPath)
+
+	// 3. Drop database (best effort)
+	dbName := strings.ReplaceAll(name, "-", "_") + "_db"
+	if dbClient != nil {
+		dbClient.DropDatabase(dbName)
+	}
+
+	// 4. Reload Caddy
+	exec.Command("docker", "compose", "up", "-d", "caddy", "--force-recreate").Run()
+
+	return nil
+}
+
+func HandleDeleteProject(w http.ResponseWriter, r *http.Request, cc *ConfigClient, dc *DockerClient, dbClient *DatabaseClient) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	name := strings.TrimPrefix(r.URL.Path, "/api/projects/")
+	name = strings.TrimSuffix(name, "/")
+	if name == "" || !validName.MatchString(name) {
+		jsonError(w, "Invalid project name", http.StatusBadRequest)
+		return
+	}
+
+	if err := cc.DeleteProject(name, dc, dbClient); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]string{"status": "deleted", "name": name})
+}
+
 // ── Engine controls ──────────────────────────────────────
 
 func (c *ConfigClient) EngineUp() (string, error) {

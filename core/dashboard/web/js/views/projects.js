@@ -99,17 +99,37 @@ function renderProjectRows(projects) {
       '<br><span style="font-size:12px; color:var(--text-muted)">' + t('noProjectsHint') + '</span></div>';
   }
   return projects.map(function(p) {
+    var actions = '';
+    if (p.status === 'running') {
+      actions =
+        '<button class="btn-icon danger" onclick="projectAction(\'' + p.name + '\',\'stop\')" title="' + t('stop') + '">&#9632;</button>' +
+        '<button class="btn-icon" onclick="projectAction(\'' + p.name + '\',\'restart\')" title="Restart">&#8635;</button>' +
+        '<a href="https://' + p.domain + '" target="_blank" class="btn btn-sm" style="text-decoration:none;margin-left:4px;">' + p.domain + ' &#8594;</a>' +
+        '<button class="btn-icon danger" onclick="deleteProject(\'' + p.name + '\')" title="Delete" style="margin-left:4px;">&#128465;</button>';
+    } else {
+      actions =
+        '<button class="btn-icon" onclick="projectAction(\'' + p.name + '\',\'start\')" title="' + t('start') + '">&#9654;</button>' +
+        '<span class="btn btn-sm" style="opacity:0.4;">' + p.domain + '</span>' +
+        '<button class="btn-icon danger" onclick="deleteProject(\'' + p.name + '\')" title="Delete" style="margin-left:4px;">&#128465;</button>';
+    }
     return '<div class="container-row fade-in">' +
       '<div class="container-info">' +
         '<span class="dot ' + p.status + '"></span>' +
         '<span class="container-name">' + p.name + '</span>' +
         '<span class="badge badge-' + p.status + '">' + p.status + '</span>' +
       '</div>' +
-      '<div class="container-actions">' +
-        '<a href="https://' + p.domain + '" target="_blank" class="btn btn-sm" style="text-decoration:none;">' + p.domain + ' &#8594;</a>' +
-      '</div>' +
+      '<div class="container-actions">' + actions + '</div>' +
     '</div>';
   }).join('');
+}
+
+async function projectAction(name, action) {
+  try {
+    await api('/api/projects/' + name + '/' + action, { method: 'POST' });
+    setTimeout(refreshProjectList, 1500);
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 function selectTemplate(name) {
@@ -225,6 +245,17 @@ function onFolderPicked(input) {
   }
   // Reset so same folder can be re-selected
   input.value = '';
+}
+
+async function deleteProject(name) {
+  if (!confirm('Delete project "' + name + '"?\nThis will stop containers, remove Caddy config and drop the database.')) return;
+
+  try {
+    await fetch('/api/projects/' + name, { method: 'DELETE' });
+    setTimeout(refreshProjectList, 1000);
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 async function refreshProjectList() {

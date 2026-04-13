@@ -132,6 +132,65 @@ func (d *DockerClient) RestartContainer(ctx context.Context, name string) error 
 	return d.dockerPost("/containers/" + name + "/restart")
 }
 
+// Start/stop all containers matching a project prefix (e.g. "myproject-")
+func (d *DockerClient) ProjectAction(ctx context.Context, projectName string, action string) (int, error) {
+	containers, err := d.ListContainers(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	prefix := projectName + "-"
+	affected := 0
+	for _, c := range containers {
+		if !strings.HasPrefix(c.Name, prefix) {
+			continue
+		}
+		var actionErr error
+		switch action {
+		case "start":
+			actionErr = d.StartContainer(ctx, c.Name)
+		case "stop":
+			actionErr = d.StopContainer(ctx, c.Name)
+		case "restart":
+			actionErr = d.RestartContainer(ctx, c.Name)
+		}
+		if actionErr == nil {
+			affected++
+		}
+	}
+	return affected, nil
+}
+
+func HandleProjectAction(w http.ResponseWriter, r *http.Request, dc *DockerClient) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// /api/projects/{name}/{action}
+	path := strings.TrimPrefix(r.URL.Path, "/api/projects/")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) < 2 {
+		jsonError(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	name := parts[0]
+	action := parts[1]
+
+	if action != "start" && action != "stop" && action != "restart" {
+		jsonError(w, "Unknown action: "+action, http.StatusBadRequest)
+		return
+	}
+
+	affected, err := dc.ProjectAction(r.Context(), name, action)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]interface{}{"status": "ok", "action": action, "containers": affected})
+}
+
 func (d *DockerClient) StreamLogs(name string) (io.ReadCloser, error) {
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
