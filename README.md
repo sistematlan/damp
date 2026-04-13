@@ -1,6 +1,6 @@
 # DAMP
 
-**Dockerized Auto-SSL Modern PHP**
+**Dockerized Auto-SSL Modern Platform**
 
 A modern, open-source replacement for MAMP, XAMPP, WAMP, and LAMP. One command to get a full local development environment with HTTPS, MySQL, email testing, and project templates.
 
