@@ -99,6 +99,26 @@ body {
 
 .sidebar-link:hover { color: var(--blue); }
 
+.lang-toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.lang-btn {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lang-btn:hover { color: var(--text); border-color: var(--text-muted); }
+.lang-btn.active { color: var(--green); border-color: var(--green); }
+
 .sidebar-version {
   font-size: 11px;
   color: var(--text-muted);
@@ -398,6 +418,19 @@ main {
   gap: 12px;
   margin-bottom: 16px;
 }
+
+select.input {
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+
+select.input:focus { border-color: var(--green); }
 
 .log-controls select {
   padding: 8px 12px;

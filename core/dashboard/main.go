@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
 	"io/fs"
 	"log"
 	"net/http"
@@ -35,6 +36,17 @@ func main() {
 	}
 	dbClient := internal.NewDatabaseClient(dbHost, dbPass)
 
+	pgHost := os.Getenv("PG_HOST")
+	if pgHost == "" {
+		pgHost = "damp-postgres"
+	}
+	pgClient := internal.NewPostgresClient(pgHost, dbPass)
+
+	redisHost := os.Getenv("REDIS_HOST")
+	if redisHost == "" {
+		redisHost = "damp-redis"
+	}
+
 	dampDir := os.Getenv("DAMP_DIR")
 	if dampDir == "" {
 		dampDir = "/damp"
@@ -54,16 +66,35 @@ func main() {
 		internal.HandleContainerAction(w, r, dockerClient)
 	})
 	mux.HandleFunc("/api/databases", func(w http.ResponseWriter, r *http.Request) {
-		internal.HandleDatabases(w, r, dbClient)
+		internal.HandleDatabases(w, r, dbClient, pgClient)
 	})
 	mux.HandleFunc("/api/databases/", func(w http.ResponseWriter, r *http.Request) {
-		internal.HandleDatabaseAction(w, r, dbClient)
+		internal.HandleDatabaseAction(w, r, dbClient, pgClient)
+	})
+	mux.HandleFunc("/api/redis", func(w http.ResponseWriter, r *http.Request) {
+		internal.HandleRedis(w, r, redisHost)
 	})
 	mux.HandleFunc("/api/templates", func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleTemplates(w, r, configClient)
 	})
 	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
-		internal.HandleProjects(w, r, configClient)
+		if r.Method == http.MethodPost {
+			internal.HandleCreateProject(w, r, configClient, dbClient)
+			return
+		}
+		projects, err := configClient.ListProjectsFromCaddy(dockerClient)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"error":"` + err.Error() + `"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		json.NewEncoder(w).Encode(projects)
+	})
+	mux.HandleFunc("/api/engine/", func(w http.ResponseWriter, r *http.Request) {
+		internal.HandleEngine(w, r, configClient)
 	})
 	mux.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleSSEEvents(w, r, dockerClient)
@@ -73,7 +104,6 @@ func main() {
 	webContent, _ := fs.Sub(webFS, "web")
 	fileServer := http.FileServer(http.FS(webContent))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// SPA: serve index.html for non-file routes
 		path := r.URL.Path
 		if path != "/" && !strings.Contains(path, ".") && !strings.HasPrefix(path, "/api/") {
 			r.URL.Path = "/"

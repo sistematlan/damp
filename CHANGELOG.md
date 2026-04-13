@@ -35,11 +35,9 @@ at `1.0.0`, breaking changes will be reserved for major bumps.
   build artifacts and the upcoming `data/` directory.
 
 ### Fixed
-- Recovered the `plataforma_tzapin_v1` and `plataforma_tzapin_v2`
-  databases from the remote source after a DAMP volume reset wiped
-  them locally. Root cause (ephemeral named volume vulnerable to
-  `docker compose down -v`) is tracked in `BACKLOG.md` as the next
-  priority.
+- Identified that named Docker volumes are lost on
+  `docker compose down -v`. Data persistence via bind-mounts is
+  tracked in `BACKLOG.md` as the next priority.
 
 ### Breaking
 - Any external script that referenced `./docker-compose.yml`,
@@ -63,6 +61,6 @@ Initial internal release.
   `create-db`, `drop-db`, `import`, `export`, `new`, `exec`, `trust`,
   `reload`, `add-host`.
 
-[Unreleased]: https://github.com/yourusername/damp/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/yourusername/damp/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/yourusername/damp/releases/tag/v0.1.0
+[Unreleased]: https://github.com/sistematlan/damp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sistematlan/damp/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/sistematlan/damp/releases/tag/v0.1.0

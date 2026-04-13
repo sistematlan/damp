@@ -1,20 +1,23 @@
 # DAMP Project Backlog
 
-## 🟢 Completado hoy
-- [x] **Aislamiento del Core:** Motor movido a `core/`, separado de los proyectos.
-- [x] **Registro Global:** Persistencia en `~/.damp/projects.json`.
-- [x] **UI/UX:** Interfaz "Terminal-Luxe" con Sidebar y diseño Bento.
-- [x] **Adopción Zero-Config:** Selector de carpetas nativo y auto-configuración de Caddy/DNS.
-- [x] **SSL/DNS:** Scripts de `trust` y `setup-dns` funcionando.
+## Done
+- [x] **Core isolation:** Engine moved to `core/`, separated from projects.
+- [x] **Global registry:** Persistence in `~/.damp/projects.json`.
+- [x] **UI/UX:** "Terminal-Luxe" interface with sidebar and Bento layout.
+- [x] **Zero-config adoption:** Native folder picker and auto Caddy/DNS config.
+- [x] **SSL/DNS:** `trust` and `setup-dns` scripts working.
+- [x] **Dashboard:** Web UI with project creation, database management (MySQL + PostgreSQL), Redis status, logs, EN/ES support.
+- [x] **CLI:** `damp new` with interactive template selector and auto-setup (DB + Caddy + hosts + containers).
+- [x] **Global command:** `damp` available system-wide via `/usr/local/bin`.
 
-## 🟡 Pendiente Prioritario
-- [x] **Restauración de DB:** Resuelto — v1/v2 recuperadas desde dump remoto (2026-04-11). Raíz: volumen `core_mysql_data` efímero frente a rebuilds.
-- [ ] **Persistencia de datos:** Mover `mysql_data`/`postgres_data`/`caddy_data` a bind-mounts (`./data/`) para sobrevivir `docker compose down -v`.
-- [ ] **Comando `./damp backup` / `./damp restore`:** Dumps automatizados de todas las DBs a `./data/backups/YYYY-MM-DD/`.
-- [ ] **Detector de Conflictos:** Alerta de puertos ocupados al iniciar el motor.
-- [ ] **Logs en Tiempo Real:** Integrar visor de logs en la App Desktop.
+## Priority
+- [ ] **Data persistence:** Move `mysql_data`/`postgres_data`/`caddy_data` to bind-mounts (`./data/`) to survive `docker compose down -v`.
+- [ ] **Backup/Restore:** `./damp backup` / `./damp restore` — automated DB dumps to `./data/backups/YYYY-MM-DD/`.
+- [ ] **Port conflict detection:** Alert when ports are already in use before starting the engine.
+- [ ] **Real-time logs in Desktop App:** Integrate log viewer into Tauri app.
 
-## 🔵 Futuro / Publishing
-- [ ] **Bundling:** Incluir `core/` dentro de los recursos de la App Tauri.
-- [ ] **Templates Pro:** Añadir Laravel, Astro y WordPress optimizado.
-- [ ] **Multi-plataforma:** Probar instaladores en Windows (WSL2) y Linux.
+## Future
+- [ ] **Modular services:** Enable/disable services (`damp enable memcached`), version swapping (`damp use mysql 5.7`).
+- [ ] **Bundling:** Include `core/` inside Tauri app resources.
+- [ ] **Pro templates:** Add Laravel, Astro, and optimized WordPress templates.
+- [ ] **Multi-platform:** Test installers on Windows (WSL2) and Linux.

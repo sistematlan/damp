@@ -70,7 +70,7 @@ services:
     networks:
       - damp
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U root"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -127,10 +127,11 @@ services:
     container_name: damp-dashboard
     restart: unless-stopped
     ports:
-      - "${DASHBOARD_PORT:-9000}:9000"
+      - "${DASHBOARD_PORT:-9200}:9000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/damp:ro
+      - ./caddy/projects.d:/damp/caddy/projects.d
     environment:
       DAMP_DIR: /damp
       DB_HOST: damp-db

@@ -22,7 +22,7 @@ A modern, open-source replacement for MAMP, XAMPP, WAMP, and LAMP. One command t
 ## Quick start
 
 ```bash
-git clone https://github.com/yourusername/damp.git
+git clone https://github.com/sistematlan/damp.git
 cd damp
 ./install.sh
 ```

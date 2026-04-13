@@ -52,11 +52,11 @@ function connectSSE() {
 }
 
 function updateStatusBar() {
-  const running = containers.filter(c => c.state === 'running').length;
-  const indicator = document.getElementById('status-indicator');
-  const dot = indicator.querySelector('.dot');
+  var running = containers.filter(function(c) { return c.state === 'running'; }).length;
+  var indicator = document.getElementById('status-indicator');
+  var dot = indicator.querySelector('.dot');
   dot.className = 'dot ' + (running > 0 ? 'running' : 'stopped');
-  document.getElementById('container-count').textContent = `${running} containers`;
+  document.getElementById('container-count').textContent = running + ' ' + t('containers');
 }
 
 // ── Shared render helpers ──────────────────────────────
@@ -102,8 +102,11 @@ window.addEventListener('hashchange', () => {
   navigate(path);
 });
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
   connectSSE();
-  const path = location.hash.slice(1) || '/';
+  // Apply saved language
+  var savedLang = localStorage.getItem('damp-lang') || 'en';
+  if (savedLang !== 'en') setLang(savedLang);
+  var path = location.hash.slice(1) || '/';
   navigate(path);
 });

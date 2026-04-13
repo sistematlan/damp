@@ -11,6 +11,11 @@
     email {$CADDY_EMAIL:admin@localhost}
 }
 
+# ── Dashboard ──────────────────────────────────────────────
+{$DAMP_DOMAIN:damp.local} {
+    reverse_proxy damp-dashboard:9000
+}
+
 # ── PHPMyAdmin ──────────────────────────────────────────────
 {$PMA_DOMAIN} {
     reverse_proxy damp-phpmyadmin:80

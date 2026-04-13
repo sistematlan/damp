@@ -24,6 +24,122 @@ BOLD="\033[1m"
 DIM="\033[2m"
 NC="\033[0m"
 
+PROJECTS_DIR="$DAMP_CORE_DIR/caddy/projects.d"
+TEMPLATES_DIR="$DAMP_CORE_DIR/templates"
+
+# ── Detect project type from existing files ────────────────────
+detect_template() {
+  local dir="$1"
+  if [ -f "$dir/wp-config.php" ] || [ -d "$dir/wp-content" ]; then
+    echo "wordpress"
+  elif [ -f "$dir/composer.json" ]; then
+    if grep -q '"laravel/framework"' "$dir/composer.json" 2>/dev/null; then
+      echo "frankenphp"
+    elif grep -q '"codeigniter4/framework"' "$dir/composer.json" 2>/dev/null; then
+      echo "frankenphp"
+    elif grep -q '"symfony/' "$dir/composer.json" 2>/dev/null; then
+      echo "frankenphp"
+    else
+      # Check PHP version requirement to decide legacy vs modern
+      local php_req
+      php_req=$(grep -o '"php":\s*"[^"]*"' "$dir/composer.json" 2>/dev/null || true)
+      if echo "$php_req" | grep -qE '5\.[0-9]'; then
+        echo "php-ancient"
+      elif echo "$php_req" | grep -qE '7\.[0-4]'; then
+        echo "php-legacy"
+      else
+        echo "php-fpm"
+      fi
+    fi
+  elif [ -f "$dir/package.json" ]; then
+    echo "node"
+  elif ls "$dir"/*.php &>/dev/null; then
+    echo "php-fpm"
+  else
+    echo ""
+  fi
+}
+
+# ── Interactive template selector ──────────────────────────────
+select_template() {
+  local templates=()
+  local descriptions=()
+  while IFS= read -r t; do
+    templates+=("$t")
+  done < <(ls -1 "$TEMPLATES_DIR")
+
+  descriptions=("PHP 8.4 + FrankenPHP (Laravel, CI4, Symfony)" "Node.js 22 (React, Vue, Astro, Express)" "PHP 5.6 + Apache (legacy rescue)" "PHP 8.4 + Nginx + FPM (classic)" "PHP 7.4 + Nginx + FPM (CI3, Laravel 8)" "WordPress (official image)")
+
+  echo -e "${BOLD}Available templates:${NC}" >&2
+  echo "" >&2
+  for i in "${!templates[@]}"; do
+    echo -e "  ${BOLD}$((i+1)))${NC} ${templates[$i]}  ${DIM}— ${descriptions[$i]}${NC}" >&2
+  done
+  echo "" >&2
+  echo -n "Select template [1-${#templates[@]}]: " >&2
+  if (echo >/dev/tty) 2>/dev/null; then
+    read -r choice </dev/tty || choice=""
+  else
+    read -r choice || choice=""
+  fi
+
+  if [ -n "$choice" ] && [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#templates[@]}" ]; then
+    echo "${templates[$((choice-1))]}"
+  else
+    echo ""
+  fi
+}
+
+# ── Setup project (DB, Caddy, hosts, start) ────────────────────
+setup_project() {
+  local project="$1"
+  local target="$2"
+  local domain="${project}.local"
+  local dbname="${project//-/_}_db"
+
+  # 1. Create database
+  echo -e "${DIM}Creating database '${dbname}'...${NC}"
+  docker exec damp-db mysql -uroot -p"${DB_ROOT_PASSWORD:-root}" \
+    -e "CREATE DATABASE IF NOT EXISTS \`$dbname\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+
+  # 2. Generate Caddy config in projects.d/
+  mkdir -p "$PROJECTS_DIR"
+  cat > "$PROJECTS_DIR/${project}.caddy" <<EOF
+${domain} {
+    reverse_proxy ${project}-app:80
+}
+EOF
+  echo -e "${DIM}Caddy config created: projects.d/${project}.caddy${NC}"
+
+  # 3. Add host entry
+  if ! grep -q "127.0.0.1.*$domain" /etc/hosts 2>/dev/null; then
+    echo -e "${DIM}Adding ${domain} to /etc/hosts (requires sudo)...${NC}"
+    if ! sudo sh -c "echo '127.0.0.1   $domain' >> /etc/hosts" 2>/dev/null; then
+      echo -e "${YELLOW}Could not update /etc/hosts. Run manually:${NC}"
+      echo -e "  sudo sh -c \"echo '127.0.0.1   ${domain}' >> /etc/hosts\""
+    fi
+  fi
+
+  # 4. Reload Caddy to pick up new config
+  echo -e "${DIM}Reloading Caddy...${NC}"
+  docker compose up -d caddy --force-recreate >/dev/null 2>&1
+
+  # 5. Start project
+  echo -e "${DIM}Starting project containers...${NC}"
+  (cd "$target" && docker compose up -d)
+
+  echo ""
+  echo -e "${GREEN}${BOLD}✔ Project '${project}' is ready!${NC}"
+  echo ""
+  echo -e "  URL       → ${BOLD}https://${domain}${NC}"
+  echo -e "  Database  → ${BOLD}${dbname}${NC}"
+  echo -e "  Directory → ${BOLD}${target}${NC}"
+  echo ""
+  echo -e "  ${DIM}Run ${BOLD}damp trust${NC}${DIM} if you haven't yet (HTTPS without warnings).${NC}"
+}
+
+CALLER_DIR="$(pwd)"
+
 # Always run docker compose from the core directory where docker-compose.yml is
 cd "$DAMP_CORE_DIR"
 
@@ -35,8 +151,9 @@ case "${1:-help}" in
     docker compose up -d
     echo -e "${GREEN}DAMP is running.${NC}"
     echo ""
-    echo -e "  PHPMyAdmin  → ${BOLD}http://localhost:${PMA_PORT:-8080}${NC}"
-    echo -e "  Mailpit     → ${BOLD}http://localhost:${MAIL_HTTP_PORT:-8025}${NC}"
+    echo -e "  Dashboard   → ${BOLD}https://damp.local${NC}  ${DIM}http://localhost:${DASHBOARD_PORT:-9200}${NC}"
+    echo -e "  PHPMyAdmin  → ${BOLD}https://pma.local${NC}   ${DIM}http://localhost:${PMA_PORT:-8080}${NC}"
+    echo -e "  Mailpit     → ${BOLD}https://mail.local${NC}  ${DIM}http://localhost:${MAIL_HTTP_PORT:-8025}${NC}"
     echo -e "  MySQL       → ${BOLD}localhost:${DB_PORT:-3306}${NC}"
     ;;
 
@@ -192,24 +309,63 @@ case "${1:-help}" in
 
   # ── New project from template ────────────────────────────────
   new)
-    template="${2:-}"
-    project="${3:-}"
-    if [ -z "$template" ] || [ -z "$project" ]; then
-      echo "Usage: damp new <template> <project-name>"
-      echo ""
-      echo "Available templates:"
-      ls -1 "$DAMP_CORE_DIR/templates/"
-      exit 1
-    fi
-    if [ ! -d "$DAMP_CORE_DIR/templates/$template" ]; then
-      echo -e "${RED}Template '$template' not found.${NC}"
-      echo "Available: $(ls -1 "$DAMP_CORE_DIR/templates/" | tr '\n' ' ')"
+    arg1="${2:-}"
+    arg2="${3:-}"
+
+    # Parse arguments: `damp new <name>` or `damp new <template> <name>`
+    if [ -z "$arg1" ]; then
+      echo "Usage: damp new <project-name>"
+      echo "       damp new <template> <project-name>"
       exit 1
     fi
 
-    target="$(pwd)/$project"
+    if [ -n "$arg2" ]; then
+      # Two args: damp new <template> <name>
+      template="$arg1"
+      project="$arg2"
+    else
+      # One arg: damp new <name> — detect or ask
+      project="$arg1"
+      template=""
+
+      target="$CALLER_DIR/$project"
+      # Try to detect from existing files
+      if [ -d "$target" ] && [ "$(ls -A "$target" 2>/dev/null)" ]; then
+        detected=$(detect_template "$target")
+        if [ -n "$detected" ]; then
+          echo -e "Detected existing project: ${BOLD}${detected}${NC}"
+          echo -n "Use this template? [Y/n]: "
+          if (echo >/dev/tty) 2>/dev/null; then
+            read -r confirm </dev/tty
+          else
+            read -r confirm
+          fi
+          if [ "$confirm" != "n" ] && [ "$confirm" != "N" ]; then
+            template="$detected"
+          fi
+        fi
+      fi
+
+      # If not detected, show selector
+      if [ -z "$template" ]; then
+        template=$(select_template)
+        if [ -z "$template" ]; then
+          echo -e "${RED}Invalid selection.${NC}"
+          exit 1
+        fi
+      fi
+    fi
+
+    # Validate template
+    if [ ! -d "$TEMPLATES_DIR/$template" ]; then
+      echo -e "${RED}Template '$template' not found.${NC}"
+      echo "Available: $(ls -1 "$TEMPLATES_DIR" | tr '\n' ' ')"
+      exit 1
+    fi
+
+    target="$CALLER_DIR/$project"
     mkdir -p "$target"
-    cp -r "$DAMP_CORE_DIR/templates/$template/"* "$target/"
+    cp -r "$TEMPLATES_DIR/$template/"* "$target/"
 
     # Replace PROJECT_NAME
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -218,13 +374,33 @@ case "${1:-help}" in
       find "$target" -type f -exec sed -i "s/PROJECT_NAME/$project/g" {} +
     fi
 
-    echo -e "${GREEN}Project '$project' created at $target${NC}"
+    echo -e "${GREEN}Project '$project' created from template '${template}'.${NC}"
+
+    # Auto-setup: DB, Caddy, hosts, start
+    setup_project "$project" "$target"
+    ;;
+
+  # ── List projects ─────────────────────────────────────────────
+  list)
+    echo -e "${BOLD}DAMP Projects:${NC}"
     echo ""
-    echo "Next steps:"
-    echo "  1. cd $project"
-    echo "  2. Add ${project}.local to DAMP's .env and Caddyfile"
-    echo "  3. damp add-host ${project}.local"
-    echo "  4. docker compose up -d"
+    if [ ! -d "$PROJECTS_DIR" ] || [ -z "$(ls -A "$PROJECTS_DIR"/*.caddy 2>/dev/null)" ]; then
+      echo -e "  ${DIM}No projects registered. Create one with: damp new <name>${NC}"
+      exit 0
+    fi
+    printf "  ${BOLD}%-20s %-25s %-10s${NC}\n" "PROJECT" "DOMAIN" "STATUS"
+    printf "  %-20s %-25s %-10s\n" "───────────────────" "────────────────────────" "─────────"
+    for caddy_file in "$PROJECTS_DIR"/*.caddy; do
+      name="$(basename "$caddy_file" .caddy)"
+      domain="${name}.local"
+      status=$(docker ps --filter "name=^${name}-" --format "{{.Status}}" 2>/dev/null | head -1)
+      if [ -n "$status" ]; then
+        printf "  %-20s %-25s ${GREEN}%-10s${NC}\n" "$name" "$domain" "running"
+      else
+        printf "  %-20s %-25s ${DIM}%-10s${NC}\n" "$name" "$domain" "stopped"
+      fi
+    done
+    echo ""
     ;;
 
   # ── Help ─────────────────────────────────────────────────────
@@ -251,7 +427,9 @@ case "${1:-help}" in
     echo "  export <db> [f] Export SQL dump"
     echo ""
     echo -e "${BOLD}Projects:${NC}"
-    echo "  new <tpl> <name>  Create project from template"
+    echo "  new <name>        Create project (interactive template selector)"
+    echo "  new <tpl> <name>  Create project from specific template"
+    echo "  list              List registered projects"
     echo "  add-host <domain> Add domain to /etc/hosts"
     echo ""
     echo -e "${BOLD}SSL & DNS:${NC}"
