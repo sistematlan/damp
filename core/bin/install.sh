@@ -118,6 +118,14 @@ else
   echo -e "${DIM}  .env already exists, keeping current config.${NC}"
 fi
 
+# WSL2: enable Windows drive access
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  if [ ! -f docker-compose.override.yml ]; then
+    cp docker-compose.wsl.yml docker-compose.override.yml
+    echo -e "${GREEN}  WSL2 detected — enabled Windows drive access (/mnt).${NC}"
+  fi
+fi
+
 # ── 3. Start services ────────────────────────────────
 step "Starting DAMP services..."
 echo -e "${DIM}  Pulling images and starting containers (first time may take a few minutes)...${NC}"

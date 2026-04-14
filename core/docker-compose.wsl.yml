@@ -1,0 +1,6 @@
+# WSL2 override: mount Windows drives for folder browser access
+# Usage: automatically loaded by install.sh on WSL2
+services:
+  dashboard:
+    volumes:
+      - /mnt:/mnt:ro

@@ -450,7 +450,13 @@ func hostHome() string {
 
 func HandleHomeDir(w http.ResponseWriter, r *http.Request) {
 	home := hostHome()
-	jsonResponse(w, map[string]string{"home": home, "parent": filepath.Dir(home)})
+	_, hasMnt := os.Stat("/mnt/c")
+	isWSL := hasMnt == nil
+	startPath := filepath.Dir(home)
+	if isWSL {
+		startPath = "/"
+	}
+	jsonResponse(w, map[string]string{"home": home, "parent": startPath})
 }
 
 func HandleBrowse(w http.ResponseWriter, r *http.Request) {
@@ -461,34 +467,59 @@ func HandleBrowse(w http.ResponseWriter, r *http.Request) {
 
 	home := hostHome()
 	dirPath := r.URL.Query().Get("path")
+
+	// Detect if /mnt exists (WSL2)
+	_, hasMnt := os.Stat("/mnt/c")
+	isWSL := hasMnt == nil
+
 	if dirPath == "" {
-		dirPath = filepath.Dir(home) // e.g. /Users on macOS, /home on Linux
+		if isWSL {
+			dirPath = "/" // Show root so user can pick /home or /mnt
+		} else {
+			dirPath = filepath.Dir(home) // /Users on macOS, /home on Linux
+		}
 	}
 
-	// Prevent traversal outside home parent directory
+	// Allowed base paths
 	homeParent := filepath.Dir(home)
 	cleanPath := filepath.Clean(dirPath)
-	if !strings.HasPrefix(cleanPath, homeParent) && !strings.HasPrefix(cleanPath, "/mnt") {
+	allowed := cleanPath == "/" ||
+		strings.HasPrefix(cleanPath, homeParent) ||
+		strings.HasPrefix(cleanPath, "/mnt") ||
+		strings.HasPrefix(cleanPath, "/home")
+	if !allowed {
 		jsonError(w, "Access restricted", http.StatusForbidden)
 		return
 	}
 
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		jsonError(w, err.Error(), http.StatusInternalServerError)
-		return
+	// If showing root, only show relevant directories
+	var dirs []DirEntry
+	if cleanPath == "/" {
+		for _, name := range []string{"home", "mnt"} {
+			if info, err := os.Stat("/" + name); err == nil && info.IsDir() {
+				dirs = append(dirs, DirEntry{Name: name, IsDir: true})
+			}
+		}
+		// Also show /Users on macOS
+		if info, err := os.Stat("/Users"); err == nil && info.IsDir() {
+			dirs = append(dirs, DirEntry{Name: "Users", IsDir: true})
+		}
+	} else {
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			if entry.IsDir() {
+				dirs = append(dirs, DirEntry{Name: entry.Name(), IsDir: true})
+			}
+		}
 	}
 
-	var dirs []DirEntry
-	for _, entry := range entries {
-		// Skip hidden directories
-		if strings.HasPrefix(entry.Name(), ".") {
-			continue
-		}
-		if entry.IsDir() {
-			dirs = append(dirs, DirEntry{Name: entry.Name(), IsDir: true})
-		}
-	}
 	jsonResponse(w, map[string]interface{}{
 		"path":    dirPath,
 		"entries": dirs,
