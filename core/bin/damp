@@ -381,6 +381,77 @@ case "${1:-help}" in
     docker exec -it "$container" bash || docker exec -it "$container" sh
     ;;
 
+  # ── Init existing project ─────────────────────────────────────
+  init)
+    project="${2:-$(basename "$CALLER_DIR")}"
+
+    # Normalize project name
+    project=$(echo "$project" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/-\+/-/g' | sed 's/^-//;s/-$//')
+
+    target="$CALLER_DIR"
+
+    # Must be inside an existing project
+    if [ ! "$(ls -A "$target" 2>/dev/null)" ]; then
+      echo -e "${RED}Current directory is empty. Use 'damp new' to create a project.${NC}"
+      exit 1
+    fi
+
+    # Detect template
+    template=$(detect_template "$target")
+    if [ -n "$template" ]; then
+      echo -e "Detected project type: ${BOLD}${template}${NC}"
+      echo -n "Use this template? [Y/n]: "
+      if (echo >/dev/tty) 2>/dev/null; then
+        read -r confirm </dev/tty
+      else
+        read -r confirm
+      fi
+      if [ "$confirm" = "n" ] || [ "$confirm" = "N" ]; then
+        template=""
+      fi
+    fi
+
+    # If not detected or rejected, show selector
+    if [ -z "$template" ]; then
+      template=$(select_template)
+      if [ -z "$template" ]; then
+        echo -e "${RED}Invalid selection.${NC}"
+        exit 1
+      fi
+    fi
+
+    # Validate template
+    if [ ! -d "$TEMPLATES_DIR/$template" ]; then
+      echo -e "${RED}Template '$template' not found.${NC}"
+      exit 1
+    fi
+
+    # Copy template files, backing up conflicts
+    for file in "$TEMPLATES_DIR/$template/"*; do
+      fname="$(basename "$file")"
+      if [ -f "$target/$fname" ]; then
+        echo -e "${YELLOW}Backing up existing ${fname} → ${fname}.bak${NC}"
+        mv "$target/$fname" "$target/${fname}.bak"
+      fi
+      cp "$file" "$target/$fname"
+    done
+
+    # Replace PROJECT_NAME only in copied template files
+    for file in "$TEMPLATES_DIR/$template/"*; do
+      fname="$(basename "$file")"
+      if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s/PROJECT_NAME/$project/g" "$target/$fname"
+      else
+        sed -i "s/PROJECT_NAME/$project/g" "$target/$fname"
+      fi
+    done
+
+    echo -e "${GREEN}Project '${project}' initialized with template '${template}'.${NC}"
+
+    # Auto-setup: DB, Caddy, hosts, start
+    setup_project "$project" "$target"
+    ;;
+
   # ── New project from template ────────────────────────────────
   new)
     arg1="${2:-}"
@@ -509,6 +580,7 @@ case "${1:-help}" in
     echo -e "${BOLD}Projects:${NC}"
     echo "  new <name>        Create project (interactive template selector)"
     echo "  new <tpl> <name>  Create project from specific template"
+    echo "  init [name]       Init existing project (run from project dir)"
     echo "  start <project>   Start a project's containers"
     echo "  stop <project>    Stop a project's containers"
     echo "  list              List registered projects"
