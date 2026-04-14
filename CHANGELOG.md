@@ -10,6 +10,26 @@ at `1.0.0`, breaking changes will be reserved for major bumps.
 
 ## [Unreleased]
 
+### Added
+- `damp init [name]` command to integrate existing projects into DAMP
+  without creating a subdirectory. Auto-detects project type, copies
+  template files (backing up conflicts), and sets up DB, Caddy vhost,
+  and containers.
+- Linux and Windows WSL2 support (folder browser shows `/home` and
+  `/mnt` on WSL2).
+- Configurable TLD via `DAMP_TLD` environment variable (default `.local`).
+- `damp start/stop <project>` commands for individual project control.
+- `damp update` command (git pull + rebuild).
+- `damp list` command to show registered projects and their status.
+- Dashboard: folder browser, auto-start, project name normalization,
+  start/stop/restart/delete controls, project registry, services grid.
+- GitHub Pages project site.
+
+### Fixed
+- Default TLD reverted to `.local` (kept configurable via `DAMP_TLD`).
+- Dashboard project start/stop now works correctly.
+- WSL2 folder browser now shows `/home` and `/mnt`.
+
 ## [0.2.0] — 2026-04-11
 
 ### Added
