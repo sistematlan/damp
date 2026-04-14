@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DAMP — Dockerized Auto-SSL Modern Platform</title>
+  <meta name="description" content="Open-source local dev stack: Caddy HTTPS, MySQL, PostgreSQL, Redis, Mailpit, and project templates.">
+  <meta property="og:title" content="DAMP">
+  <meta property="og:description" content="Dockerized Auto-SSL Modern Platform — local HTTPS, databases, and templates in one command.">
+  <meta property="og:image" content="https://sistematlan.github.io/damp/logo.png">
+  <link rel="icon" href="./icon-32.png" type="image/png">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="stylesheet" href="./site.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Site">
+      <div class="sidebar-brand">
+        <img src="./icon-64.png" width="64" height="64" alt="">
+        <span>DAMP</span>
+      </div>
+      <div class="sidebar-note">
+        This site mirrors the <strong style="color: var(--text-muted);">dashboard</strong> look. The live control panel runs at
+        <strong style="color: var(--green);">https://damp.local</strong> after install.
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div class="topbar-title">Overview</div>
+        <div class="topbar-actions">
+          <a class="btn btn-primary" href="https://github.com/sistematlan/damp">GitHub</a>
+          <a class="btn" href="https://github.com/sistematlan/damp#quick-start">README</a>
+        </div>
+      </header>
+
+      <div class="content">
+        <section class="hero">
+          <div class="hero-copy">
+            <h1>Dockerized Auto-SSL Modern Platform</h1>
+            <p class="lead">
+              A modern, open-source replacement for MAMP, XAMPP, WAMP, and LAMP. One command gets you HTTPS for
+              <code style="font-family: var(--font-mono); font-size: 12px; color: var(--green);">*.local</code>,
+              shared databases, Mailpit, Redis, and project templates — the same stack the <strong>web dashboard</strong> and <strong>desktop app</strong> manage when DAMP is running.
+            </p>
+          </div>
+          <div class="mascot-wrap">
+            <img class="mascot" src="./logo.png" width="512" height="512" alt="DAMP axolotl mascot">
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="stack-heading">
+          <div class="card-header">
+            <span class="card-title" id="stack-heading">What you get</span>
+          </div>
+          <div class="service-grid">
+            <div class="service-card">
+              <div class="service-header"><span class="service-icon" aria-hidden="true">&#9741;</span></div>
+              <div class="service-name">Caddy</div>
+              <div class="service-desc">Reverse proxy &amp; automatic HTTPS for local domains</div>
+            </div>
+            <div class="service-card">
+              <div class="service-header"><span class="service-icon" aria-hidden="true">&#9707;</span></div>
+              <div class="service-name">MySQL &amp; PostgreSQL</div>
+              <div class="service-desc">Shared database servers for all projects</div>
+            </div>
+            <div class="service-card">
+              <div class="service-header"><span class="service-icon" aria-hidden="true">&#9672;</span></div>
+              <div class="service-name">Redis</div>
+              <div class="service-desc">Cache and sessions</div>
+            </div>
+            <div class="service-card">
+              <div class="service-header"><span class="service-icon" aria-hidden="true">&#128236;</span></div>
+              <div class="service-name">Mailpit</div>
+              <div class="service-desc">Catch-all SMTP for dev email testing</div>
+            </div>
+            <div class="service-card">
+              <div class="service-header"><span class="service-icon" aria-hidden="true">&#9881;</span></div>
+              <div class="service-name">Templates</div>
+              <div class="service-desc">WordPress, PHP, Node, FrankenPHP, and more</div>
+            </div>
+            <div class="service-card">
+              <div class="service-header"><span class="service-icon" aria-hidden="true">&#9673;</span></div>
+              <div class="service-name">Dashboard &amp; app</div>
+              <div class="service-desc">Web UI at damp.local · Tauri tray app in-repo</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card code-card" aria-labelledby="install-heading">
+          <div class="card-header">
+            <span class="card-title" id="install-heading">Quick start</span>
+          </div>
+          <pre><code>git clone https://github.com/sistematlan/damp.git
+cd damp
+./install.sh</code></pre>
+        </section>
+      </div>
+
+      <footer class="page-foot">
+        MIT License · <a href="https://github.com/sistematlan/damp">github.com/sistematlan/damp</a>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
