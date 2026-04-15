@@ -17,10 +17,10 @@ echo ""
 # ── macOS ──────────────────────────────────────────────
 if [[ "$OSTYPE" == "darwin"* ]]; then
   echo "Detected macOS."
-  echo "Creating /etc/resolver/${DAMP_TLD:-local} (requires sudo)..."
+  echo "Creating /etc/resolver/${DAMP_TLD:-test} (requires sudo)..."
   sudo mkdir -p /etc/resolver
-  sudo sh -c "echo 'nameserver 127.0.0.1' > /etc/resolver/${DAMP_TLD:-local}"
-  echo -e "${GREEN}Done! All *.${DAMP_TLD:-local} domains now resolve to 127.0.0.1.${NC}"
+  sudo sh -c "echo 'nameserver 127.0.0.1' > /etc/resolver/${DAMP_TLD:-test}"
+  echo -e "${GREEN}Done! All *.${DAMP_TLD:-test} domains now resolve to 127.0.0.1.${NC}"
 
 # ── Linux ──────────────────────────────────────────────
 elif [[ "$OSTYPE" == "linux"* ]]; then
@@ -48,10 +48,10 @@ elif [[ "$OSTYPE" == "linux"* ]]; then
     sudo sh -c 'cat > /etc/systemd/resolved.conf.d/damp.conf << CONF
 [Resolve]
 DNS=127.0.0.1
-Domains=~${DAMP_TLD:-local}
+Domains=~${DAMP_TLD:-test}
 CONF'
     sudo systemctl restart systemd-resolved
-    echo -e "${GREEN}Done! All *.${DAMP_TLD:-local} domains now resolve via DAMP DNS.${NC}"
+    echo -e "${GREEN}Done! All *.${DAMP_TLD:-test} domains now resolve via DAMP DNS.${NC}"
 
   # NetworkManager (older systems)
   elif command -v nmcli &>/dev/null; then

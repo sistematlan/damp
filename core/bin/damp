@@ -33,7 +33,7 @@ if [ -f "$DAMP_CORE_DIR/.env" ]; then
   source "$DAMP_CORE_DIR/.env"
   set +a
 fi
-DAMP_TLD="${DAMP_TLD:-local}"
+DAMP_TLD="${DAMP_TLD:-test}"
 
 # ── Detect project type from existing files ────────────────────
 detect_template() {
@@ -159,9 +159,9 @@ case "${1:-help}" in
     docker compose up -d
     echo -e "${GREEN}DAMP is running.${NC}"
     echo ""
-    echo -e "  Dashboard   → ${BOLD}https://damp.local${NC}  ${DIM}http://localhost:${DASHBOARD_PORT:-9200}${NC}"
-    echo -e "  PHPMyAdmin  → ${BOLD}https://pma.local${NC}   ${DIM}http://localhost:${PMA_PORT:-8080}${NC}"
-    echo -e "  Mailpit     → ${BOLD}https://mail.local${NC}  ${DIM}http://localhost:${MAIL_HTTP_PORT:-8025}${NC}"
+    echo -e "  Dashboard   → ${BOLD}https://damp.${DAMP_TLD}${NC}  ${DIM}http://localhost:${DASHBOARD_PORT:-9200}${NC}"
+    echo -e "  PHPMyAdmin  → ${BOLD}https://pma.${DAMP_TLD}${NC}   ${DIM}http://localhost:${PMA_PORT:-8080}${NC}"
+    echo -e "  Mailpit     → ${BOLD}https://mail.${DAMP_TLD}${NC}  ${DIM}http://localhost:${MAIL_HTTP_PORT:-8025}${NC}"
     echo -e "  MySQL       → ${BOLD}localhost:${DB_PORT:-3306}${NC}"
     ;;
 
@@ -588,7 +588,7 @@ case "${1:-help}" in
     echo ""
     echo -e "${BOLD}SSL & DNS:${NC}"
     echo "  trust           Install CA in system keychain (HTTPS without warnings)"
-    echo "  setup-dns       Configure host to resolve *.local without /etc/hosts"
+    echo "  setup-dns       Configure host to resolve *.${DAMP_TLD} without /etc/hosts"
     echo ""
     echo -e "${BOLD}Meta:${NC}"
     echo "  update          Pull latest version and rebuild"

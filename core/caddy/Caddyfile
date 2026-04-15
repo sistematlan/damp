@@ -1,18 +1,18 @@
 # =============================================================
 # DAMP — Global Reverse Proxy
 # =============================================================
-# Each *.local domain gets automatic HTTPS.
+# Each *.test domain gets automatic HTTPS.
 # To add a project:
-#   1. Add DOMAIN=name.local in .env
+#   1. Add DOMAIN=name.test in .env
 #   2. Add a block here pointing to the container:port
 #   3. Run: damp reload
 # =============================================================
 {
-    email {$CADDY_EMAIL:admin@localhost}
+    local_certs
 }
 
 # ── Dashboard ──────────────────────────────────────────────
-{$DAMP_DOMAIN:damp.local} {
+{$DAMP_DOMAIN:damp.test} {
     reverse_proxy damp-dashboard:9000
 }
 

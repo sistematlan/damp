@@ -19,16 +19,20 @@ services:
       - damp
     restart: unless-stopped
 
-  # ── DNS Resolver (Auto-DNS *.TLD) ─────────────────────────────
+  # ── DNS Resolver (Optional — wildcard *.TLD) ──────────────────
+  # Disabled by default. Enable with: docker compose --profile dns up -d
+  # Useful on Linux or when you need wildcard subdomains (*.project.test).
+  # On macOS with OrbStack/Docker Desktop, /etc/hosts entries are used instead.
   dns:
     image: andyshinn/dnsmasq:latest
     container_name: damp-dns
+    profiles: ["dns"]
     cap_add:
       - NET_ADMIN
     ports:
       - "53:53/tcp"
       - "53:53/udp"
-    command: -A /${DAMP_TLD:-local}/127.0.0.1 --log-facility=-
+    command: -A /${DAMP_TLD:-test}/127.0.0.1 --log-facility=-
     restart: unless-stopped
     networks:
       - damp
@@ -132,10 +136,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/damp:ro
       - ./caddy/projects.d:/damp/caddy/projects.d
+      - /etc/hosts:/etc/hosts
       - ${HOME}:${HOME}
     environment:
       DAMP_DIR: /damp
-      DAMP_TLD: ${DAMP_TLD:-local}
+      DAMP_TLD: ${DAMP_TLD:-test}
       HOST_HOME: ${HOME}
       DB_HOST: damp-db
       DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}

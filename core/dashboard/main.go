@@ -83,6 +83,9 @@ func main() {
 	mux.HandleFunc("/api/templates", func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleTemplates(w, r, configClient)
 	})
+	mux.HandleFunc("/api/detect-template", func(w http.ResponseWriter, r *http.Request) {
+		internal.HandleDetectTemplate(w, r)
+	})
 	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			internal.HandleCreateProject(w, r, configClient, dbClient)

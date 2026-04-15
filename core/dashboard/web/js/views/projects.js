@@ -26,7 +26,7 @@ async function renderProjects(el) {
               '<button class="btn btn-primary" id="btn-create-project" onclick="createProject()">' + t('create') + '</button>' +
             '</div>' +
             '<div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">' +
-              t('scaffoldHint') + ' <code style="color: var(--green);">damp new &lt;template&gt; &lt;name&gt;</code>' +
+              t('scaffoldHint') + ' <code style="color: var(--green);">damp new &lt;name&gt;</code> · ' + t('existingHint') + ' <code style="color: var(--green);">damp init [name]</code>' +
             '</div>' +
           '</div>' +
           '<div id="create-project-status" style="display:none;"></div>' +
@@ -307,7 +307,7 @@ async function browseTo(path) {
   }
 }
 
-function selectCurrentFolder() {
+async function selectCurrentFolder() {
   var pathEl = document.getElementById('browser-path');
   if (!pathEl) return;
 
@@ -316,10 +316,21 @@ function selectCurrentFolder() {
 
   var pathInput = document.getElementById('adopt-path');
   var nameInput = document.getElementById('adopt-name');
+  var templateSelect = document.getElementById('adopt-template');
 
   if (pathInput) pathInput.value = selectedPath;
   if (nameInput && !nameInput.value) {
     nameInput.value = folderName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  }
+
+  // Auto-detect template from project files
+  if (templateSelect) {
+    try {
+      var result = await api('/api/detect-template?path=' + encodeURIComponent(selectedPath));
+      if (result.template) {
+        templateSelect.value = result.template;
+      }
+    } catch (e) { /* ignore, user can pick manually */ }
   }
 
   closeFolderBrowser();

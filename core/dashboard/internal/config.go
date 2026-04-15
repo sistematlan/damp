@@ -111,6 +111,76 @@ func HandleTemplates(w http.ResponseWriter, r *http.Request, cc *ConfigClient) {
 	jsonResponse(w, templates)
 }
 
+// ── Template detection ────────────────────────────────────
+
+// DetectTemplate inspects a directory and returns the best template name.
+// Mirrors the detect_template() logic in the CLI.
+func DetectTemplate(dir string) string {
+	// WordPress
+	if fileExists(filepath.Join(dir, "wp-config.php")) || dirExists(filepath.Join(dir, "wp-content")) {
+		return "wordpress"
+	}
+
+	// Composer-based PHP
+	composerPath := filepath.Join(dir, "composer.json")
+	if fileExists(composerPath) {
+		data, err := os.ReadFile(composerPath)
+		if err == nil {
+			content := string(data)
+			if strings.Contains(content, `"laravel/framework"`) ||
+				strings.Contains(content, `"codeigniter4/framework"`) ||
+				strings.Contains(content, `"symfony/`) {
+				return "frankenphp"
+			}
+			// Check PHP version requirement
+			if strings.Contains(content, `"5.`) {
+				return "php-ancient"
+			}
+			if strings.Contains(content, `"7.`) {
+				return "php-legacy"
+			}
+		}
+		return "php-fpm"
+	}
+
+	// Node.js
+	if fileExists(filepath.Join(dir, "package.json")) {
+		return "node"
+	}
+
+	// Any PHP files
+	entries, err := os.ReadDir(dir)
+	if err == nil {
+		for _, e := range entries {
+			if strings.HasSuffix(e.Name(), ".php") {
+				return "php-fpm"
+			}
+		}
+	}
+
+	return ""
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func HandleDetectTemplate(w http.ResponseWriter, r *http.Request) {
+	dir := r.URL.Query().Get("path")
+	if dir == "" {
+		jsonError(w, "path is required", http.StatusBadRequest)
+		return
+	}
+	template := DetectTemplate(dir)
+	jsonResponse(w, map[string]string{"template": template})
+}
+
 // ── Project creation ──────────────────────────────────────
 
 type CreateProjectRequest struct {
@@ -227,6 +297,9 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 	cmd.Dir = c.dampDir
 	cmd.Run()
 
+	// 5. Add /etc/hosts entry
+	addHostEntry(domain)
+
 	// 5. If path provided, scaffold + start
 	status := "pending"
 	output := fmt.Sprintf("Project '%s' registered. Run: damp new %s %s", name, template, name)
@@ -238,27 +311,29 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 		}
 		os.MkdirAll(projectPath, 0755)
 
-		// Copy template files if no docker-compose.yml exists
-		composePath := filepath.Join(projectPath, "docker-compose.yml")
-		if _, err := os.Stat(composePath); os.IsNotExist(err) {
-			entries, readErr := os.ReadDir(templateDir)
-			if readErr != nil {
-				return nil, fmt.Errorf("failed to read template dir: %w", readErr)
+		// Copy template files, backing up existing conflicts
+		entries, readErr := os.ReadDir(templateDir)
+		if readErr != nil {
+			return nil, fmt.Errorf("failed to read template dir: %w", readErr)
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
 			}
-			for _, entry := range entries {
-				if entry.IsDir() {
-					continue
-				}
-				srcPath := filepath.Join(templateDir, entry.Name())
-				dstPath := filepath.Join(projectPath, entry.Name())
-				data, err := os.ReadFile(srcPath)
-				if err != nil {
-					return nil, fmt.Errorf("failed to read template file %s: %w", entry.Name(), err)
-				}
-				content := strings.ReplaceAll(string(data), "PROJECT_NAME", name)
-				if err := os.WriteFile(dstPath, []byte(content), 0644); err != nil {
-					return nil, fmt.Errorf("failed to write %s: %w", dstPath, err)
-				}
+			dstPath := filepath.Join(projectPath, entry.Name())
+			// Backup existing file if it exists
+			if fileExists(dstPath) {
+				bakPath := dstPath + ".bak"
+				os.Rename(dstPath, bakPath)
+			}
+			srcPath := filepath.Join(templateDir, entry.Name())
+			data, err := os.ReadFile(srcPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read template file %s: %w", entry.Name(), err)
+			}
+			content := strings.ReplaceAll(string(data), "PROJECT_NAME", name)
+			if err := os.WriteFile(dstPath, []byte(content), 0644); err != nil {
+				return nil, fmt.Errorf("failed to write %s: %w", dstPath, err)
 			}
 		}
 
@@ -431,10 +506,30 @@ type DirEntry struct {
 	IsDir bool   `json:"is_dir"`
 }
 
+// addHostEntry appends "127.0.0.1  domain" to /etc/hosts if not already present.
+// The dashboard container must have /etc/hosts mounted read-write from the host.
+func addHostEntry(domain string) {
+	hostsPath := "/etc/hosts"
+	data, err := os.ReadFile(hostsPath)
+	if err != nil {
+		return
+	}
+	if strings.Contains(string(data), domain) {
+		return
+	}
+	entry := fmt.Sprintf("127.0.0.1   %s\n", domain)
+	f, err := os.OpenFile(hostsPath, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.WriteString(entry)
+}
+
 func dampTLD() string {
 	tld := os.Getenv("DAMP_TLD")
 	if tld == "" {
-		return "local"
+		return "test"
 	}
 	return tld
 }
