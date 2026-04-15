@@ -10,25 +10,52 @@ at `1.0.0`, breaking changes will be reserved for major bumps.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-04-14
+
 ### Added
 - `damp init [name]` command to integrate existing projects into DAMP
   without creating a subdirectory. Auto-detects project type, copies
   template files (backing up conflicts), and sets up DB, Caddy vhost,
   and containers.
-- Linux and Windows WSL2 support (folder browser shows `/home` and
-  `/mnt` on WSL2).
-- Configurable TLD via `DAMP_TLD` environment variable (default `.local`).
+- Dashboard: auto-detects project template when selecting a folder
+  via the `GET /api/detect-template?path=...` endpoint.
+- Dashboard: adds `/etc/hosts` entry automatically on project creation.
+- Dashboard: backs up existing files (`.bak`) before copying template.
 - `damp start/stop <project>` commands for individual project control.
 - `damp update` command (git pull + rebuild).
 - `damp list` command to show registered projects and their status.
+- Linux and Windows WSL2 support (folder browser shows `/home` and
+  `/mnt` on WSL2).
 - Dashboard: folder browser, auto-start, project name normalization,
   start/stop/restart/delete controls, project registry, services grid.
 - GitHub Pages project site.
 
+### Changed
+- **Default TLD changed from `.local` to `.test`** — `.test` is reserved
+  by [RFC 6761](https://www.rfc-editor.org/rfc/rfc6761) for testing and
+  does not conflict with macOS mDNS/Bonjour. Configurable via `DAMP_TLD`.
+- **DNS: `/etc/hosts` is now the primary mechanism** — entries are added
+  automatically by both CLI and dashboard. Works with all Docker runtimes
+  (OrbStack, Docker Desktop, Colima).
+- **`damp-dns` disabled by default** — moved to Docker Compose profile
+  `dns`. Enable with `docker compose --profile dns up -d` when wildcard
+  DNS is needed (e.g., Linux without mDNS conflicts).
+- Caddy uses `local_certs` (internal CA) for all domains instead of
+  attempting ACME with Let's Encrypt/ZeroSSL.
+- README completely rewritten with comprehensive documentation for CLI,
+  dashboard, DNS, SSL, project workflows, and platform notes.
+
 ### Fixed
-- Default TLD reverted to `.local` (kept configurable via `DAMP_TLD`).
 - Dashboard project start/stop now works correctly.
 - WSL2 folder browser now shows `/home` and `/mnt`.
+
+### Breaking
+- Default TLD is now `.test` instead of `.local`. Existing projects
+  using `.local` domains will need their Caddy configs and `/etc/hosts`
+  entries updated. Set `DAMP_TLD=local` in `core/.env` to keep the
+  old behavior.
+- `damp-dns` no longer starts by default. Use `--profile dns` or
+  set `DAMP_TLD=local` and run `damp setup-dns` for wildcard DNS.
 
 ## [0.2.0] — 2026-04-11
 
@@ -81,6 +108,7 @@ Initial internal release.
   `create-db`, `drop-db`, `import`, `export`, `new`, `exec`, `trust`,
   `reload`, `add-host`.
 
-[Unreleased]: https://github.com/sistematlan/damp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/sistematlan/damp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/sistematlan/damp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sistematlan/damp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sistematlan/damp/releases/tag/v0.1.0
