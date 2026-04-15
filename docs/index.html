@@ -1,106 +1,306 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DAMP — Dockerized Auto-SSL Modern Platform</title>
-  <meta name="description" content="Open-source local dev stack: Caddy HTTPS, MySQL, PostgreSQL, Redis, Mailpit, and project templates.">
-  <meta property="og:title" content="DAMP">
-  <meta property="og:description" content="Dockerized Auto-SSL Modern Platform — local HTTPS, databases, and templates in one command.">
-  <meta property="og:image" content="https://sistematlan.github.io/damp/logo.png">
-  <link rel="icon" href="./icon-32.png" type="image/png">
-  <link rel="apple-touch-icon" href="./icon-192.png">
-  <link rel="stylesheet" href="./site.css">
-</head>
-<body>
-  <div class="shell">
-    <aside class="sidebar" aria-label="Site">
-      <div class="sidebar-brand">
-        <img src="./icon-64.png" width="64" height="64" alt="">
-        <span>DAMP</span>
-      </div>
-      <div class="sidebar-note">
-        This site mirrors the <strong style="color: var(--text-muted);">dashboard</strong> look. The live control panel runs at
-        <strong style="color: var(--green);">https://damp.local</strong> after install.
-      </div>
-    </aside>
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DAMP — Tu entorno de desarrollo, en un click</title>
+    <meta name="description" content="DAMP: Docker + Auto-TLS + MySQL + PHP. Levanta tu entorno de desarrollo completo con un solo comando. Gratis y open source." />
+    <link rel="icon" type="image/png" href="/damp-site/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" crossorigin href="/damp-site/assets/index-KvKLDYM5.css">
+  </head>
+  <body>
 
-    <main>
-      <header class="topbar">
-        <div class="topbar-title">Overview</div>
-        <div class="topbar-actions">
-          <a class="btn btn-primary" href="https://github.com/sistematlan/damp">GitHub</a>
-          <a class="btn" href="https://github.com/sistematlan/damp#quick-start">README</a>
+    <!-- ═══ NAV ═══ -->
+    <nav>
+      <div class="nav-inner">
+        <a href="#" class="nav-brand">
+          <img src="/damp-site/favicon.png" alt="DAMP Logo" class="nav-logo" style="width: 32px; height: 32px; object-fit: contain;" />
+          <span>DAMP</span>
+        </a>
+        <div class="nav-links">
+          <a href="#features">Funciones</a>
+          <a href="#how">Como funciona</a>
+          <a href="#faq">FAQ</a>
+          <a href="https://github.com/sistematlan/damp" target="_blank" class="btn btn-ghost">⭐ GitHub</a>
+          <a href="#download" class="btn btn-primary">Obtener DAMP</a>
         </div>
-      </header>
-
-      <div class="content">
-        <section class="hero">
-          <div class="hero-copy">
-            <h1>Dockerized Auto-SSL Modern Platform</h1>
-            <p class="lead">
-              A modern, open-source replacement for MAMP, XAMPP, WAMP, and LAMP. One command gets you HTTPS for
-              <code style="font-family: var(--font-mono); font-size: 12px; color: var(--green);">*.local</code>,
-              shared databases, Mailpit, Redis, and project templates — the same stack the <strong>web dashboard</strong> and <strong>desktop app</strong> manage when DAMP is running.
-            </p>
-          </div>
-          <div class="mascot-wrap">
-            <img class="mascot" src="./logo.png" width="512" height="512" alt="DAMP axolotl mascot">
-          </div>
-        </section>
-
-        <section class="card" aria-labelledby="stack-heading">
-          <div class="card-header">
-            <span class="card-title" id="stack-heading">What you get</span>
-          </div>
-          <div class="service-grid">
-            <div class="service-card">
-              <div class="service-header"><span class="service-icon" aria-hidden="true">&#9741;</span></div>
-              <div class="service-name">Caddy</div>
-              <div class="service-desc">Reverse proxy &amp; automatic HTTPS for local domains</div>
-            </div>
-            <div class="service-card">
-              <div class="service-header"><span class="service-icon" aria-hidden="true">&#9707;</span></div>
-              <div class="service-name">MySQL &amp; PostgreSQL</div>
-              <div class="service-desc">Shared database servers for all projects</div>
-            </div>
-            <div class="service-card">
-              <div class="service-header"><span class="service-icon" aria-hidden="true">&#9672;</span></div>
-              <div class="service-name">Redis</div>
-              <div class="service-desc">Cache and sessions</div>
-            </div>
-            <div class="service-card">
-              <div class="service-header"><span class="service-icon" aria-hidden="true">&#128236;</span></div>
-              <div class="service-name">Mailpit</div>
-              <div class="service-desc">Catch-all SMTP for dev email testing</div>
-            </div>
-            <div class="service-card">
-              <div class="service-header"><span class="service-icon" aria-hidden="true">&#9881;</span></div>
-              <div class="service-name">Templates</div>
-              <div class="service-desc">WordPress, PHP, Node, FrankenPHP, and more</div>
-            </div>
-            <div class="service-card">
-              <div class="service-header"><span class="service-icon" aria-hidden="true">&#9673;</span></div>
-              <div class="service-name">Dashboard &amp; app</div>
-              <div class="service-desc">Web UI at damp.local · Tauri tray app in-repo</div>
-            </div>
-          </div>
-        </section>
-
-        <section class="card code-card" aria-labelledby="install-heading">
-          <div class="card-header">
-            <span class="card-title" id="install-heading">Quick start</span>
-          </div>
-          <pre><code>git clone https://github.com/sistematlan/damp.git
-cd damp
-./install.sh</code></pre>
-        </section>
       </div>
+    </nav>
 
-      <footer class="page-foot">
-        MIT License · <a href="https://github.com/sistematlan/damp">github.com/sistematlan/damp</a>
-      </footer>
-    </main>
-  </div>
-</body>
+    <!-- ═══ HERO ═══ -->
+    <section class="hero">
+      <div class="hero-glow"></div>
+      <div class="container">
+        <div class="mascota-hero">
+            <img src="/damp-site/assets/mascota-Q4VFY6J4.png" alt="DAMP Mascota" class="hero-mascota-img"/>
+        </div>
+        <div class="badge">🔥 Open Source &middot; Gratis para Siempre</div>
+        <h1>Tu entorno de desarrollo,<br/><span class="gradient-text">en un click.</span></h1>
+        <p class="hero-sub">
+          Deja de perder horas configurando Dockerfiles y peleando con certificados SSL locales.<br/>
+          DAMP levanta tu stack completo en segundos para que te enfoques en lo que importa: <strong>programar.</strong>
+        </p>
+        <div class="hero-actions">
+          <a href="#download" class="btn btn-primary btn-lg">
+            Instalar DAMP Gratis
+          </a>
+          <div class="hero-cli">
+            <code>git clone https://github.com/sistematlan/damp.git && cd damp && ./install.sh</code>
+          </div>
+        </div>
+        
+        <!-- Social Proof / Stats -->
+        <div class="hero-stats">
+          <div class="stat">
+            <span class="stat-value">1</span>
+            <span class="stat-label">Comando de instalación</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value">5+</span>
+            <span class="stat-label">Stacks listos para usar</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value">0</span>
+            <span class="stat-label">Dolores de cabeza</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ TERMINAL DEMO ═══ -->
+    <section class="demo">
+      <div class="container">
+        <div class="terminal">
+          <div class="terminal-bar">
+            <div class="terminal-dots">
+              <span class="dot red"></span>
+              <span class="dot yellow"></span>
+              <span class="dot green"></span>
+            </div>
+            <span class="terminal-title">Terminal</span>
+          </div>
+          <div class="terminal-body">
+            <div class="line"><span class="prompt">$</span> ./damp up</div>
+            <div class="line dim">  Levantando DAMP...</div>
+            <div class="line ok">  ✓ Caddy proxy listo</div>
+            <div class="line ok">  ✓ MySQL 8.4 listo</div>
+            <div class="line ok">  ✓ PHPMyAdmin listo</div>
+            <div class="line ok">  ✓ Mailpit listo</div>
+            <div class="line"></div>
+            <div class="line"><span class="prompt">$</span> ./damp new frankenphp mi-tienda</div>
+            <div class="line ok">  ✓ Proyecto 'mi-tienda' creado</div>
+            <div class="line"></div>
+            <div class="line"><span class="prompt">$</span> ./damp add-host mi-tienda.local</div>
+            <div class="line ok">  ✓ mi-tienda.local agregado</div>
+            <div class="line"></div>
+            <div class="line dim">  → https://mi-tienda.local 🔒</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ FEATURES ═══ -->
+    <section id="features" class="features">
+      <div class="container">
+        <h2>El fin de los dolores de cabeza en local.<br/><span class="gradient-text">Todo lo que necesitas.</span></h2>
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">🔒</div>
+            <h3>Adiós warnings SSL</h3>
+            <p>Cada dominio .local obtiene un certificado SSL válido automáticamente. Olvídate de los errores de seguridad en el navegador. Igual que en producción.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🗄️</div>
+            <h3>MySQL compartido</h3>
+            <p>Un servidor MySQL optimizado para todos tus proyectos. PHPMyAdmin incluido en pma.local. Crea y administra bases de datos con un comando.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📬</div>
+            <h3>Correo local seguro</h3>
+            <p>Mailpit atrapa todos tus correos de prueba. Ningún email saldrá a internet por error. Panel web en mail.local para revisar tus envíos.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🐘</div>
+            <h3>Del legacy al futuro</h3>
+            <p>Desde PHP 5.6 hasta 8.4. Cada proyecto elige su propia versión y corren simultáneamente sin conflictos de puertos.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🌐</div>
+            <h3>Multi-proyecto real</h3>
+            <p>Levanta 10 proyectos al mismo tiempo con su propio dominio .local. Se acabaron los "localhost:8080" y "localhost:8081".</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📦</div>
+            <h3>A un comando de distancia</h3>
+            <p>Crea proyectos con FrankenPHP, PHP-FPM + Nginx, Apache, o Node.js. Un simple comando y tu entorno está listo para programar.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ HOW IT WORKS ═══ -->
+    <section id="how" class="how">
+      <div class="container">
+        <h2>¿Cómo funciona la magia?</h2>
+        <div class="architecture">
+          <div class="arch-layer arch-proxy">
+            <div class="arch-label">Caddy Proxy</div>
+            <div class="arch-desc">Enrutamiento automático + HTTPS local</div>
+          </div>
+          <div class="arch-arrow">↕</div>
+          <div class="arch-projects">
+            <div class="arch-project">
+              <span class="arch-dot"></span>
+              mi-tienda.local
+              <span class="arch-tag">PHP 8.4</span>
+            </div>
+            <div class="arch-project">
+              <span class="arch-dot"></span>
+              legacy-app.local
+              <span class="arch-tag">PHP 7.4</span>
+            </div>
+            <div class="arch-project">
+              <span class="arch-dot"></span>
+              dashboard.local
+              <span class="arch-tag">React</span>
+            </div>
+          </div>
+          <div class="arch-arrow">↕</div>
+          <div class="arch-services">
+            <div class="arch-service">MySQL 8.4</div>
+            <div class="arch-service">Mailpit</div>
+            <div class="arch-service">PHPMyAdmin</div>
+          </div>
+        </div>
+        <p class="arch-footnote">Todo corre encapsulado en Docker. Tu sistema operativo se mantiene 100% limpio.</p>
+      </div>
+    </section>
+
+    <!-- ═══ TEMPLATES ═══ -->
+    <section id="templates" class="templates">
+      <div class="container">
+        <h2>Elige tu stack</h2>
+        <p class="section-sub">Templates pre-configurados para que no escribas un solo archivo de configuración.</p>
+        <div class="template-grid">
+          <div class="template-card">
+            <div class="template-header">
+              <span class="template-icon">⚡</span>
+              <span class="template-name">FrankenPHP</span>
+            </div>
+            <div class="template-php">PHP 8.4</div>
+            <p>Caddy + PHP integrado. El stack más rápido. Ideal para CodeIgniter 4, Laravel 11+, Symfony 7.</p>
+            <code class="template-cmd">./damp new frankenphp mi-app</code>
+          </div>
+          <div class="template-card">
+            <div class="template-header">
+              <span class="template-icon">🔧</span>
+              <span class="template-name">PHP-FPM + Nginx</span>
+            </div>
+            <div class="template-php">PHP 8.x</div>
+            <p>El setup clásico de la industria. Compatible con todo: WordPress, Laravel, Drupal.</p>
+            <code class="template-cmd">./damp new php-fpm mi-app</code>
+          </div>
+          <div class="template-card">
+            <div class="template-header">
+              <span class="template-icon">📦</span>
+              <span class="template-name">PHP Legacy</span>
+            </div>
+            <div class="template-php">PHP 7.4</div>
+            <p>Para proyectos que aún no migran. Entorno seguro para CodeIgniter 3 o apps legacy.</p>
+            <code class="template-cmd">./damp new php-legacy mi-app</code>
+          </div>
+          <div class="template-card">
+            <div class="template-header">
+              <span class="template-icon">🏛️</span>
+              <span class="template-name">PHP Ancient</span>
+            </div>
+            <div class="template-php">PHP 5.6</div>
+            <p>Apache + mod_rewrite. Para cuando necesitas rescatar ese proyecto del 2014.</p>
+            <code class="template-cmd">./damp new php-ancient mi-app</code>
+          </div>
+          <div class="template-card">
+            <div class="template-header">
+              <span class="template-icon">💚</span>
+              <span class="template-name">Node.js</span>
+            </div>
+            <div class="template-php">Node 22</div>
+            <p>React, Vue, Astro, Next.js. Porque no todo es PHP, y tu frontend también merece .local.</p>
+            <code class="template-cmd">./damp new node mi-app</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ FAQ ═══ -->
+    <section id="faq" class="faq">
+      <div class="container">
+        <h2>Preguntas Frecuentes</h2>
+        <div class="faq-list">
+          <div class="faq-item">
+            <h4 class="faq-question">¿DAMP ensucia mi sistema operativo?</h4>
+            <p class="faq-answer">En absoluto. Todo DAMP corre dentro de contenedores Docker. Tu Mac, Linux o Windows se mantiene completamente limpio de bases de datos o versiones de PHP conflictivas.</p>
+          </div>
+          <div class="faq-item">
+            <h4 class="faq-question">¿Funciona en Windows?</h4>
+            <p class="faq-answer">Sí. Aunque tenemos una App gráfica exclusiva para macOS, el CLI de DAMP funciona perfectamente en Linux y en Windows a través de WSL2.</p>
+          </div>
+          <div class="faq-item">
+            <h4 class="faq-question">¿Puedo usar diferentes versiones de PHP a la vez?</h4>
+            <p class="faq-answer">Totalmente. Puedes tener un proyecto corriendo en PHP 5.6 (legacy) y otro en PHP 8.4 (frankenphp) al mismo tiempo en el mismo navegador. DAMP enruta el tráfico al contenedor correcto.</p>
+          </div>
+          <div class="faq-item">
+            <h4 class="faq-question">¿Es gratis para uso comercial?</h4>
+            <p class="faq-answer">Sí, DAMP es 100% open source y gratuito. Puedes usarlo para proyectos personales, freelance o dentro de tu empresa sin restricciones.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ DOWNLOAD ═══ -->
+    <section id="download" class="download">
+      <div class="container">
+        <h2>Recupera tu tiempo de desarrollo</h2>
+        <p class="section-sub">Instala DAMP hoy y enfócate en el código, no en los servidores.</p>
+        <div class="download-options">
+          <div class="download-card primary">
+            <div class="download-icon">🍎</div>
+            <h3>macOS App</h3>
+            <p>La experiencia definitiva. Interfaz gráfica con panel de control para todos tus proyectos.</p>
+            <a href="#" class="btn btn-primary btn-lg">Descargar para Mac (.dmg)</a>
+            <span class="download-note d-block mt-2">macOS 12+ &middot; Apple Silicon & Intel</span>
+          </div>
+          <div class="download-card">
+            <div class="download-icon">⌨️</div>
+            <h3>CLI (Terminal)</h3>
+            <p>Para los puristas. Funciona en cualquier sistema compatible con Docker.</p>
+            <div class="download-cli">
+              <code>git clone https://github.com/sistematlan/damp.git<br/>cd damp && ./install.sh</code>
+            </div>
+            <span class="download-note">macOS &middot; Linux &middot; Windows (WSL2)</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ FOOTER ═══ -->
+    <footer>
+      <div class="container footer-inner">
+        <div class="footer-brand">
+          <img src="/damp-site/favicon.png" alt="DAMP Logo" style="width: 24px; height: 24px; object-fit: contain; filter: grayscale(1);" />
+          <span>DAMP</span>
+          <span class="footer-tagline">Docker + Auto-TLS + MySQL + PHP</span>
+        </div>
+        <div class="footer-links">
+          <a href="https://github.com/sistematlan/damp" target="_blank">GitHub</a>
+          <a href="https://github.com/sistematlan/damp/blob/main/MANUAL.md" target="_blank">Documentación</a>
+          <a href="https://github.com/sistematlan/damp/issues" target="_blank">Reportar bug</a>
+        </div>
+        <p class="footer-copy">Hecho con ❤️ por <a href="https://sistematlan.com" target="_blank">Sistematlan</a></p>
+      </div>
+    </footer>
+
+  </body>
 </html>
