@@ -238,9 +238,12 @@ The web dashboard at https://damp.test provides:
 
 ```bash
 damp update
+damp reload
 ```
 
-This pulls the latest code and rebuilds all services.
+`damp update` pulls the latest code and rebuilds all services. Always run `damp reload` after updating to apply any Caddy configuration changes.
+
+If a new version changes the default TLD or templates, you may also need to run `damp trust` again to update SSL certificates.
 
 ## Platform notes
 
