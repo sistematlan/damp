@@ -10,6 +10,51 @@ at `1.0.0`, breaking changes will be reserved for major bumps.
 
 ## [Unreleased]
 
+### Added
+- `setup-dns.sh`: comprehensive host-native DNS installer for macOS
+  (Homebrew), Linux (apt/dnf/pacman), and WSL2. Installs dnsmasq,
+  configures wildcard `*.test` → `127.0.0.1`, no Docker dependency.
+- macOS: osascript password dialog during `install.sh` and
+  `damp setup-dns` so the user gets a clear system-level prompt
+  instead of a blinking terminal.
+- Dashboard: `reloadCaddy()` function uses Caddy's admin API
+  (`POST http://damp-caddy:2019/load`) to reload config dynamically
+  without recreating the container. Works across all Docker runtimes.
+- Caddyfile: `admin 0.0.0.0:2019` exposes the admin API to the
+  Docker network so the dashboard can reach it.
+- `install.sh` step 6 now calls `setup-dns.sh` (was broken — used
+  stale `DAMP_TLD:-local` references and never installed dnsmasq).
+
+### Changed
+- **DNS: host-native dnsmasq replaces all other approaches.** The
+  `damp-dns` container has been removed from `docker-compose.yml`.
+  Previous approaches (`/etc/hosts` from the container, Docker-based
+  dnsmasq) were unreliable on macOS/OrbStack because Docker
+  bind-mounts of `/etc/hosts` don't sync writes back to the host,
+  and UDP port forwarding from containers is fragile.
+- **Dashboard project creation no longer writes `/etc/hosts`.** DNS
+  is handled entirely by the host-level dnsmasq installed at setup.
+  The `addHostEntry()` function is kept as a best-effort fallback
+  (it works on Linux where the bind mount is writable).
+- `damp reload` (dashboard): now uses Caddy admin API internally
+  instead of `docker compose up -d caddy --force-recreate`.
+
+### Fixed
+- Projects imported via the dashboard not resolving in the browser
+  (ERR_NAME_NOT_RESOLVED) — root cause: `/etc/hosts` bind-mount on
+  macOS/OrbStack doesn't propagate writes from the container to the
+  host.
+- `install.sh` step 6 referencing `DAMP_TLD:-local` (should be
+  `:-test`) and never installing dnsmasq.
+- Caddy not picking up new project configs after dashboard import —
+  `docker compose up -d caddy --force-recreate` didn't work reliably
+  from inside the dashboard container on macOS.
+
+### Removed
+- `damp-dns` service from `docker-compose.yml`. The dnsmasq-in-Docker
+  approach was unreliable on macOS (UDP port forwarding broken) and
+  Linux (`systemd-resolved` port 53 conflict).
+
 ## [0.3.0] — 2026-04-14
 
 ### Added

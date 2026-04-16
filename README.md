@@ -51,7 +51,8 @@ The installer will:
 3. Start all services
 4. Wait for databases to be healthy
 5. Install SSL certificate (HTTPS without browser warnings)
-6. Add `damp` command to your PATH
+6. **Configure DNS** — installs dnsmasq natively on the host so all `*.test` domains resolve automatically (prompts for password on macOS via a system dialog)
+7. Add `damp` command to your PATH
 
 After installation, open https://damp.test in your browser.
 
@@ -59,7 +60,7 @@ After installation, open https://damp.test in your browser.
 
 ## Working with projects
 
-DAMP gives you two ways to set up projects: **CLI** and **Dashboard**. Both do the same thing — create a database, generate HTTPS config, add a DNS entry, and start containers.
+DAMP gives you two ways to set up projects: **CLI** and **Dashboard**. Both create a database, generate HTTPS config, and start containers. DNS resolution is handled automatically by the dnsmasq service installed during setup.
 
 ### New project from scratch
 
@@ -84,7 +85,7 @@ damp init my-app
 1. **Detects** the project type (CI4, Laravel, Symfony, Node, WordPress, etc.)
 2. **Copies** the template files (`docker-compose.yml`, `Dockerfile`, `Caddyfile`) — backs up any existing files as `.bak`
 3. **Creates** a database (`my_app_db`)
-4. **Adds** `my-app.test` to `/etc/hosts` and Caddy
+4. **Adds** a Caddy config for `my-app.test`
 5. **Starts** the containers
 
 If you omit the name, it uses the folder name: `damp init` in `~/projects/my-app/` → `my-app.test`.
@@ -94,7 +95,7 @@ If you omit the name, it uses the folder name: `damp init` in `~/projects/my-app
 Open https://damp.test → **Projects**:
 
 - **New Project** — Enter a name and select a template. Creates the database and Caddy config. Run `damp new <name>` to scaffold the files.
-- **Add Existing Folder** — Browse your filesystem, select a folder. DAMP auto-detects the template, copies files if needed, creates DB + Caddy config, adds `/etc/hosts` entry, and starts the containers.
+- **Add Existing Folder** — Browse your filesystem, select a folder. DAMP auto-detects the template, copies files if needed, creates DB + Caddy config, and starts the containers.
 
 Each project has **play/stop/restart/delete** controls in the dashboard.
 
@@ -141,26 +142,34 @@ damp export mydb           # Export SQL dump
 
 # SSL & DNS
 damp trust             # Install Caddy CA in system keychain (HTTPS without warnings)
-damp setup-dns         # Configure wildcard DNS (optional, see DNS section)
-damp reload            # Reload Caddy after config changes
-damp add-host domain   # Add a domain to /etc/hosts
+damp setup-dns         # Install/configure dnsmasq for wildcard *.test DNS (requires sudo)
+damp reload            # Reload Caddy after manual config changes
+damp add-host domain   # Add a single domain to /etc/hosts (fallback)
 ```
 
 ---
 
 ## DNS and domain resolution
 
-DAMP uses the `.test` TLD by default. Each project gets a domain like `my-project.test`.
+DAMP uses the `.test` TLD by default. Every project gets a domain like `my-project.test` that resolves to `127.0.0.1` automatically.
 
 ### How it works
 
-When you create or init a project, DAMP automatically adds `127.0.0.1 my-project.test` to `/etc/hosts`. This works on all platforms and with all Docker runtimes (OrbStack, Docker Desktop, Colima).
+During installation, `setup-dns.sh` installs **dnsmasq** natively on your host and configures it so that `*.test` resolves to `127.0.0.1`. This is a host-level DNS resolver — it runs outside Docker, so it works reliably regardless of which Docker runtime you use.
+
+| Platform | What happens |
+|----------|-------------|
+| **macOS** | dnsmasq installed via Homebrew, `/etc/resolver/test` created pointing to `127.0.0.1` |
+| **Linux** | dnsmasq installed via `apt`/`dnf`, systemd-resolved configured for split DNS |
+| **WSL2** | dnsmasq installed, `resolv.conf` updated to use local resolver |
+
+On macOS, the installer shows a system password dialog so you don't need to hunt for a blinking terminal prompt.
 
 ### Why .test instead of .local?
 
 - `.local` is reserved for **mDNS/Bonjour** on macOS, which causes DNS conflicts and slow resolution
 - `.test` is reserved by [RFC 6761](https://www.rfc-editor.org/rfc/rfc6761) specifically for testing — no conflicts, no external resolution
-- `.test` works cleanly with `/etc/hosts` and custom DNS resolvers
+- `.test` works cleanly with dnsmasq and custom DNS resolvers
 
 ### Custom TLD
 
@@ -170,21 +179,36 @@ You can change the TLD in `core/.env`:
 DAMP_TLD=dev    # or .example, .localhost, etc.
 ```
 
-After changing, run `damp reload` to apply.
+After changing, run `damp setup-dns` to reconfigure the DNS resolver, and `damp reload` to apply Caddy changes.
 
-### Optional: Wildcard DNS
+### Why not use a Docker container for DNS?
 
-If you need wildcard subdomains (e.g., `*.my-project.test`) or don't want `/etc/hosts` entries, you can enable the built-in DNS resolver:
+The old approach (`damp-dns` container) used dnsmasq inside Docker with port 53 published to the host. This was unreliable because:
+
+- **macOS/OrbStack**: UDP port forwarding from containers to the host is unreliable. DNS queries (which use UDP) don't reach the container.
+- **Linux**: `systemd-resolved` already binds port 53 on the host, causing conflicts.
+- **WSL2**: Same as Linux, plus WSL2 manages its own DNS.
+
+Installing dnsmasq natively on the host avoids all these issues — no Docker networking layer between DNS queries and the resolver.
+
+### Troubleshooting DNS
+
+If a project domain doesn't resolve:
 
 ```bash
-# Start DAMP with the DNS service
-docker compose --profile dns up -d
-
-# Configure macOS to use it
+# Re-run DNS setup (will prompt for password)
 damp setup-dns
-```
 
-> **Note:** This requires port 53 to be available. OrbStack and some Docker runtimes use port 53 for their own DNS, which will conflict. In that case, stick with `/etc/hosts` (the default).
+# Verify dnsmasq is running
+# macOS:
+sudo brew services list | grep dnsmasq
+# Linux:
+systemctl status dnsmasq
+
+# Test DNS resolution
+ping my-project.test
+# Should show: PING my-project.test (127.0.0.1) ...
+```
 
 ---
 
@@ -247,11 +271,11 @@ If a new version changes the default TLD or templates, you may also need to run 
 
 ## Platform notes
 
-| Platform | Status | Notes |
-|----------|--------|-------|
-| macOS 12+ (Apple Silicon & Intel) | **Fully supported** | OrbStack recommended |
-| Linux (Ubuntu, Fedora, Debian) | **Supported** | Testing welcome |
-| Windows (WSL2) | **Supported** | Testing welcome |
+| Platform | Status | DNS approach |
+|----------|--------|-------------|
+| macOS 12+ (Apple Silicon & Intel) | **Fully supported** | dnsmasq via Homebrew + `/etc/resolver/test`. OrbStack recommended. |
+| Linux (Ubuntu, Fedora, Debian) | **Supported** | dnsmasq + systemd-resolved split DNS. Testing welcome. |
+| Windows (WSL2) | **Supported** | dnsmasq + custom `resolv.conf`. Testing welcome. |
 
 ## License
 

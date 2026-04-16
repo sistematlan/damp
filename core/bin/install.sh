@@ -12,6 +12,32 @@ BOLD="\033[1m"
 DIM="\033[2m"
 NC="\033[0m"
 
+# ── Sudo helper ──────────────────────────────────────────
+# On macOS: show an osascript dialog so the user gets a system-level
+# password prompt instead of a blinking terminal they might miss.
+# On Linux / WSL2: fall back to regular sudo.
+damp_sudo() {
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    local password
+    password=$(osascript -e 'Tell application "System Events"
+  text returned of (display dialog "DAMP needs your password to configure DNS and install the SSL certificate." ¬
+  default answer "" ¬
+  with hidden answer ¬
+  with title "DAMP Installer" ¬
+  with icon caution ¬
+  buttons {"Cancel","Continue"} ¬
+  default button "Continue")
+end tell' 2>/dev/null) || true
+    if [ -z "$password" ]; then
+      echo -e "${RED}  Password required. Aborting.${NC}"
+      exit 1
+    fi
+    echo "$password" | sudo -S "$@"
+  else
+    sudo "$@"
+  fi
+}
+
 # Resolve real path even if called via symlink
 SOURCE="${BASH_SOURCE[0]}"
 while [ -h "$SOURCE" ]; do
@@ -163,7 +189,7 @@ fi
 
 # ── 5. SSL Certificate ───────────────────────────────
 step "Setting up HTTPS..."
-echo -e "${DIM}  Installing Caddy CA so browsers trust *.local certificates.${NC}"
+echo -e "${DIM}  Installing Caddy CA so browsers trust *.test certificates.${NC}"
 
 if bash "$BIN_DIR/trust-cert.sh" 2>/dev/null; then
   echo -e "${GREEN}  HTTPS configured — no browser warnings.${NC}"
@@ -172,41 +198,34 @@ else
   echo -e "  ${DIM}Run ${BOLD}damp trust${NC}${DIM} manually later to enable HTTPS.${NC}"
 fi
 
-# ── 6. DNS + hosts ────────────────────────────────────
+# ── 6. DNS ────────────────────────────────────────────
 step "Configuring DNS..."
 
-# Try auto-DNS first (eliminates need for /etc/hosts per project)
-dns_configured=false
-if [ "$OS" = "macos" ]; then
-  if sudo mkdir -p /etc/resolver 2>/dev/null && \
-     sudo sh -c "echo 'nameserver 127.0.0.1' > /etc/resolver/${DAMP_TLD:-local}" 2>/dev/null; then
-    dns_configured=true
-    echo -e "${GREEN}  Auto-DNS configured — all *.local domains resolve automatically.${NC}"
-  fi
-elif [ "$OS" = "linux" ]; then
-  if command -v resolvectl &>/dev/null; then
-    if sudo mkdir -p /etc/systemd/resolved.conf.d 2>/dev/null && \
-       sudo sh -c "echo -e '[Resolve]\nDNS=127.0.0.1\nDomains=~${DAMP_TLD:-local}' > /etc/systemd/resolved.conf.d/damp.conf" 2>/dev/null && \
-       sudo systemctl restart systemd-resolved 2>/dev/null; then
-      dns_configured=true
-      echo -e "${GREEN}  Auto-DNS configured via systemd-resolved.${NC}"
-    fi
+# On macOS, get the sudo password via a system dialog once.
+# Subsequent sudo calls are cached for 5 min by the OS.
+DAMP_SUDO_PASS=""
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  DAMP_SUDO_PASS=$(osascript -e 'Tell application "System Events"
+  text returned of (display dialog "DAMP needs your password to configure DNS (wildcard *.test resolution)." ¬
+  default answer "" ¬
+  with hidden answer ¬
+  with title "DAMP Installer" ¬
+  with icon caution ¬
+  buttons {"Cancel","Continue"} ¬
+  default button "Continue")
+end tell' 2>/dev/null) || true
+  if [ -z "$DAMP_SUDO_PASS" ]; then
+    echo -e "${YELLOW}  Password not entered. DNS will require manual setup.${NC}"
+    echo -e "  ${DIM}Run: ${BOLD}damp setup-dns${NC}  (requires sudo)"
   fi
 fi
 
-if [ "$dns_configured" = false ]; then
-  echo -e "${DIM}  Auto-DNS not available. Adding domains to /etc/hosts...${NC}"
-  TLD="${DAMP_TLD:-local}"
-  domains=("damp.${TLD}" "pma.${TLD}" "mail.${TLD}")
-  for domain in "${domains[@]}"; do
-    if ! grep -q "127.0.0.1.*$domain" /etc/hosts 2>/dev/null; then
-      if sudo sh -c "echo '127.0.0.1   $domain' >> /etc/hosts" 2>/dev/null; then
-        echo -e "  ${GREEN}+ $domain${NC}"
-      fi
-    else
-      echo -e "  ${DIM}~ $domain (already configured)${NC}"
-    fi
-  done
+if [ -f "$BIN_DIR/setup-dns.sh" ]; then
+  export DAMP_SUDO_PASS
+  bash "$BIN_DIR/setup-dns.sh"
+else
+  echo -e "${YELLOW}  setup-dns.sh not found.${NC}"
+  echo -e "  ${DIM}Run 'damp setup-dns' or add domains manually: damp add-host <domain>${NC}"
 fi
 
 # ── 7. Add damp to PATH ──────────────────────────────
@@ -228,7 +247,7 @@ echo ""
 echo "  ────────────────────────────────────────"
 echo -e "${GREEN}${BOLD}  DAMP is ready!${NC}"
 echo ""
-TLD="${DAMP_TLD:-local}"
+TLD="${DAMP_TLD:-test}"
 echo -e "  ${BOLD}Services:${NC}"
 echo -e "    Dashboard   ${DIM}→${NC} ${BOLD}https://damp.${TLD}${NC}      ${DIM}http://localhost:9200${NC}"
 echo -e "    PHPMyAdmin  ${DIM}→${NC} ${BOLD}https://pma.${TLD}${NC}       ${DIM}http://localhost:8080${NC}"

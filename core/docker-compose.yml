@@ -19,24 +19,6 @@ services:
       - damp
     restart: unless-stopped
 
-  # ── DNS Resolver (Optional — wildcard *.TLD) ──────────────────
-  # Disabled by default. Enable with: docker compose --profile dns up -d
-  # Useful on Linux or when you need wildcard subdomains (*.project.test).
-  # On macOS with OrbStack/Docker Desktop, /etc/hosts entries are used instead.
-  dns:
-    image: andyshinn/dnsmasq:latest
-    container_name: damp-dns
-    profiles: ["dns"]
-    cap_add:
-      - NET_ADMIN
-    ports:
-      - "53:53/tcp"
-      - "53:53/udp"
-    command: -A /${DAMP_TLD:-test}/127.0.0.1 --log-facility=-
-    restart: unless-stopped
-    networks:
-      - damp
-
   # ── MySQL ────────────────────────────────────────────────────
   db:
     image: mysql:8.4
