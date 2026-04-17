@@ -1,12 +1,10 @@
+use serde::Serialize;
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
-use serde::Serialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
-use tauri::{Manager, Runtime};
-
-const NETWORK_NAME: &str = "damp";
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::Manager;
 
 #[derive(Serialize, Clone)]
 pub struct Container {
@@ -53,7 +51,9 @@ fn resolve_damp_path() -> PathBuf {
         }
     }
 
-    env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join("core")
+    env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("core")
 }
 
 fn get_docker_path() -> String {
@@ -68,7 +68,9 @@ fn get_docker_path() -> String {
 #[tauri::command]
 fn start_project(path: String) -> Result<String, String> {
     let p = PathBuf::from(&path);
-    if !p.exists() { return Err("Project path not found".to_string()); }
+    if !p.exists() {
+        return Err("Project path not found".to_string());
+    }
 
     let output = Command::new("docker")
         .args(["compose", "up", "-d"])
@@ -85,10 +87,12 @@ fn start_project(path: String) -> Result<String, String> {
 #[tauri::command]
 fn stop_project(path: String) -> Result<String, String> {
     let p = PathBuf::from(&path);
-    if !p.exists() { return Err("Project path not found".to_string()); }
+    if !p.exists() {
+        return Err("Project path not found".to_string());
+    }
 
     let output = Command::new("docker")
-        .args(["compose", "stop"]) 
+        .args(["compose", "stop"])
         .current_dir(&p)
         .output()
         .map_err(|e| e.to_string())?;
@@ -140,17 +144,37 @@ fn get_status() -> DampStatus {
         }
 
         // Get MySQL databases only if damp-db is running
-        if container_list.iter().any(|c| c.name == "damp-db" && c.status == "running") {
+        if container_list
+            .iter()
+            .any(|c| c.name == "damp-db" && c.status == "running")
+        {
             let mysql_out = Command::new(&docker_bin)
-                .args(["exec", "damp-db", "mysql", "-uroot", "-proot", "-N", "-e", "SHOW DATABASES;"])
+                .args([
+                    "exec",
+                    "damp-db",
+                    "mysql",
+                    "-uroot",
+                    "-proot",
+                    "-N",
+                    "-e",
+                    "SHOW DATABASES;",
+                ])
                 .output();
-            
+
             if let Ok(o) = mysql_out {
                 let stdout = String::from_utf8_lossy(&o.stdout);
                 for line in stdout.lines() {
                     let db = line.trim();
-                    if !db.is_empty() && !matches!(db, "information_schema" | "mysql" | "performance_schema" | "sys") {
-                        db_list.push(Database { name: db.to_string(), engine: "mysql".to_string() });
+                    if !db.is_empty()
+                        && !matches!(
+                            db,
+                            "information_schema" | "mysql" | "performance_schema" | "sys"
+                        )
+                    {
+                        db_list.push(Database {
+                            name: db.to_string(),
+                            engine: "mysql".to_string(),
+                        });
                     }
                 }
             }
@@ -311,7 +335,7 @@ fn create_project(name: String, template: String) -> Result<String, String> {
     let damp_script = damp_path.join("damp");
     let docker_bin = get_docker_path();
     let project_path = damp_path.join(&name);
-    
+
     // 1. Create project files
     let output = Command::new("bash")
         .arg(damp_script)
@@ -376,7 +400,11 @@ fn add_project(name: String, path: String, template: String) -> Result<String, S
     if projects.iter().any(|p| p.path == path) {
         return Err("Project already exists in registry".to_string());
     }
-    projects.push(Project { name, path: path.clone(), template });
+    projects.push(Project {
+        name,
+        path: path.clone(),
+        template,
+    });
     save_projects_registry(&projects)?;
     Ok(format!("Project '{}' added to DAMP", path))
 }
@@ -399,7 +427,11 @@ fn adopt_project(path: String, template: String) -> Result<String, String> {
         return Err(format!("Template '{}' not found", template));
     }
 
-    let project_name = project_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let project_name = project_path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
 
     // 1. Copy template files
     let entries = std::fs::read_dir(&template_path).map_err(|e| e.to_string())?;
@@ -409,7 +441,10 @@ fn adopt_project(path: String, template: String) -> Result<String, String> {
         if !target.exists() {
             if entry.path().is_dir() {
                 let _ = std::fs::create_dir_all(&target);
-                for sub in std::fs::read_dir(entry.path()).unwrap().filter_map(|e| e.ok()) {
+                for sub in std::fs::read_dir(entry.path())
+                    .unwrap()
+                    .filter_map(|e| e.ok())
+                {
                     let _ = std::fs::copy(sub.path(), target.join(sub.file_name()));
                 }
             } else {
@@ -420,11 +455,15 @@ fn adopt_project(path: String, template: String) -> Result<String, String> {
 
     // 2. Generate Caddy config for this project
     // We assume the project runs on port 80 inside its own container (standard in our templates)
+    let tld = env::var("DAMP_TLD").unwrap_or_else(|_| "test".to_string());
     let caddy_conf = format!(
-        "{}.local {{\n    reverse_proxy {}-app:80\n}}\n",
-        project_name, project_name
+        "{}.{} {{\n    reverse_proxy {}-app:80\n}}\n",
+        project_name, tld, project_name
     );
-    let caddy_file_path = damp_path.join("caddy").join("projects.d").join(format!("{}.caddy", project_name));
+    let caddy_file_path = damp_path
+        .join("caddy")
+        .join("projects.d")
+        .join(format!("{}.caddy", project_name));
     std::fs::write(caddy_file_path, caddy_conf).map_err(|e| e.to_string())?;
 
     // 3. Reload Caddy via damp script
@@ -437,8 +476,11 @@ fn adopt_project(path: String, template: String) -> Result<String, String> {
 
     // 4. Register in projects.json
     add_project(project_name.clone(), path.clone(), template.clone())?;
-    
-    Ok(format!("Project '{}' is now live at https://{}.local", project_name, project_name))
+
+    Ok(format!(
+        "Project '{}' is now live at https://{}.{}",
+        project_name, project_name, tld
+    ))
 }
 
 #[derive(Serialize, Clone)]
@@ -517,31 +559,29 @@ pub fn run() {
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&tray_menu)
-                .on_menu_event(move |app, event| {
-                    match event.id.as_ref() {
-                        "quit" => {
-                            app.exit(0);
-                        }
-                        "show" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                        "start" => {
-                            let _ = damp_up();
-                        }
-                        "stop" => {
-                            let _ = damp_down();
-                        }
-                        "pma" => {
-                            let _ = open_url("http://localhost:8080".to_string());
-                        }
-                        "mail" => {
-                            let _ = open_url("http://localhost:8025".to_string());
-                        }
-                        _ => {}
+                .on_menu_event(move |app, event| match event.id.as_ref() {
+                    "quit" => {
+                        app.exit(0);
                     }
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "start" => {
+                        let _ = damp_up();
+                    }
+                    "stop" => {
+                        let _ = damp_down();
+                    }
+                    "pma" => {
+                        let _ = open_url("http://localhost:8080".to_string());
+                    }
+                    "mail" => {
+                        let _ = open_url("http://localhost:8025".to_string());
+                    }
+                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {

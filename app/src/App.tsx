@@ -43,7 +43,7 @@ function App() {
   const [actionLoading, setActionLoading] = useState(false);
   
   const [activeTab, setActiveTab] = useState("overview");
-  const [showDbInput, setShowDbInput] = useState(false);
+  const [_showDbInput, setShowDbInput] = useState(false);
   const [newDbName, setNewDbName] = useState("");
   const [dbEngine, setDbEngine] = useState("mysql");
 
