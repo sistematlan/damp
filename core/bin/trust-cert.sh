@@ -9,6 +9,7 @@ set -euo pipefail
 GREEN="\033[0;32m"
 YELLOW="\033[0;33m"
 RED="\033[0;31m"
+DIM="\033[2m"
 BOLD="\033[1m"
 NC="\033[0m"
 
@@ -61,12 +62,18 @@ elif [[ "$OSTYPE" == "linux"* ]]; then
   if grep -qi microsoft /proc/version 2>/dev/null; then
     echo ""
     echo -e "${YELLOW}WSL2 detected — also installing on Windows host...${NC}"
-    WIN_CERT=$(wslpath -w "$CERT_PATH" 2>/dev/null || echo "")
+    # Copy cert to a place Windows can definitely see
+    CP_CERT="/home/$(whoami)/damp-caddy-root-ca.crt"
+    cp "$CERT_PATH" "$CP_CERT"
+    WIN_CERT=$(wslpath -w "$CP_CERT" 2>/dev/null || echo "")
+    
     if [ -n "$WIN_CERT" ]; then
-      powershell.exe -Command "Import-Certificate -FilePath '$WIN_CERT' -CertStoreLocation 'Cert:\\LocalMachine\\Root'" 2>/dev/null \
-        && echo -e "${GREEN}Windows certificate store updated.${NC}" \
-        || echo -e "${YELLOW}Could not update Windows store. Run as admin or import $WIN_CERT manually.${NC}"
+      echo -e "${DIM}Requesting Windows Admin privileges to install certificate...${NC}"
+      # Use PowerShell to start another PowerShell as Admin to run Import-Certificate
+      powershell.exe -NoProfile -Command "Start-Process powershell -ArgumentList '-NoProfile', '-Command', \"Import-Certificate -FilePath '$WIN_CERT' -CertStoreLocation 'Cert:\\LocalMachine\\Root'\" -Verb RunAs -Wait" 2>/dev/null
+      echo -e "${GREEN}✓ Windows certificate store updated.${NC}"
     fi
+    rm -f "$CP_CERT"
   fi
 
 else

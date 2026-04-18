@@ -756,6 +756,40 @@ detect_node_command() {
   else
     echo 'npm install && npm run dev -- --host'
   fi
+# ── Windows Interop Helpers ─────────────────────────────────────
+is_wsl() {
+  grep -qi microsoft /proc/version 2>/dev/null
+}
+
+# Run PowerShell command on Windows host
+win_ps() {
+  local cmd="$1"
+  # Use powershell.exe from Windows path
+  /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -NonInteractive -Command "$cmd"
+}
+
+# Run PowerShell as Admin
+win_ps_admin() {
+  local cmd="$1"
+  # Replace " with \" to pass through to powershell
+  local escaped_cmd="${cmd//\"/\\\"}"
+  win_ps "Start-Process powershell -ArgumentList '-NoProfile', '-NonInteractive', '-Command', \"$escaped_cmd\" -Verb RunAs -Wait"
+}
+
+sync_windows_host() {
+  local domain="$1"
+  if is_wsl; then
+    echo -e "${DIM}Syncing ${domain} to Windows hosts file...${NC}"
+    local check_cmd="Get-Content C:\Windows\System32\drivers\etc\hosts | Select-String -Pattern '127.0.0.1\s+${domain}'"
+    if ! win_ps "$check_cmd" >/dev/null 2>&1; then
+      # Use `n for newline in PowerShell
+      local add_cmd="Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value \"\`n127.0.0.1 ${domain}\" -ErrorAction SilentlyContinue"
+      win_ps_admin "$add_cmd"
+      echo -e "${GREEN}✓ ${domain} added to Windows hosts.${NC}"
+    else
+      echo -e "${DIM}✓ ${domain} already in Windows hosts.${NC}"
+    fi
+  fi
 }
 
 # ── Setup project (DB, Caddy, hosts, start) ────────────────────
@@ -782,7 +816,7 @@ ${domain} {
 EOF
   echo -e "${DIM}Caddy config created: projects.d/${project}.caddy${NC}"
 
-  # 3. Add host entry
+  # 3. Add host entry (Linux/WSL)
   if ! grep -q "127.0.0.1.*$domain" /etc/hosts 2>/dev/null; then
     echo -e "${DIM}Adding ${domain} to /etc/hosts (requires sudo)...${NC}"
     if ! sudo sh -c "echo '127.0.0.1   $domain' >> /etc/hosts" 2>/dev/null; then
@@ -790,6 +824,9 @@ EOF
       echo -e "  sudo sh -c \"echo '127.0.0.1   ${domain}' >> /etc/hosts\""
     fi
   fi
+
+  # 3b. Sync to Windows host
+  sync_windows_host "$domain"
 
   # 4. Reload Caddy to pick up new config
   echo -e "${DIM}Reloading Caddy...${NC}"
@@ -824,6 +861,12 @@ case "${1:-help}" in
     docker compose up -d
     echo -e "${GREEN}DAMP is running.${NC}"
     echo ""
+    
+    # Sync core domains to Windows
+    sync_windows_host "damp.${DAMP_TLD}"
+    sync_windows_host "pma.${DAMP_TLD}"
+    sync_windows_host "mail.${DAMP_TLD}"
+
     echo -e "  Dashboard   → ${BOLD}https://damp.${DAMP_TLD}${NC}  ${DIM}http://localhost:${DASHBOARD_PORT:-9200}${NC}"
     echo -e "  PHPMyAdmin  → ${BOLD}https://pma.${DAMP_TLD}${NC}   ${DIM}http://localhost:${PMA_PORT:-8080}${NC}"
     echo -e "  Mailpit     → ${BOLD}https://mail.${DAMP_TLD}${NC}  ${DIM}http://localhost:${MAIL_HTTP_PORT:-8025}${NC}"
@@ -875,6 +918,7 @@ case "${1:-help}" in
       sudo sh -c "echo '127.0.0.1   $domain' >> /etc/hosts"
       echo -e "${GREEN}$domain added to /etc/hosts${NC}"
     fi
+    sync_windows_host "$domain"
     ;;
 
   # ── Create database ──────────────────────────────────────────
