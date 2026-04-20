@@ -1,7 +1,10 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::env;
+use std::io::{Read, Write};
+use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::Duration;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::Manager;
@@ -16,7 +19,15 @@ pub struct Container {
 #[derive(Serialize, Clone)]
 pub struct Database {
     name: String,
-    engine: String, // "mysql" or "postgres"
+    engine: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct RedisInfo {
+    connected: bool,
+    version: String,
+    memory: String,
+    keys: i64,
 }
 
 #[derive(Serialize, Clone)]
@@ -25,18 +36,18 @@ pub struct DampStatus {
     docker_installed: bool,
     orbstack_installed: bool,
     damp_path: String,
+    tld: String,
     containers: Vec<Container>,
     databases: Vec<Database>,
+    postgres_databases: Vec<Database>,
+    redis: RedisInfo,
 }
 
-/// Resolve DAMP root directory.
-/// Priority: DAMP_PATH env var → parent of the app directory → fallback.
 fn resolve_damp_path() -> PathBuf {
     if let Ok(p) = env::var("DAMP_PATH") {
         return PathBuf::from(p);
     }
 
-    // The app lives at <damp>/app, so the parent/core is the DAMP root
     if let Ok(exe) = env::current_exe() {
         let mut dir = exe.parent().map(|p| p.to_path_buf());
         for _ in 0..10 {
@@ -65,48 +76,113 @@ fn get_docker_path() -> String {
     "docker".to_string()
 }
 
-#[tauri::command]
-fn start_project(path: String) -> Result<String, String> {
-    let p = PathBuf::from(&path);
-    if !p.exists() {
-        return Err("Project path not found".to_string());
+fn get_tld() -> String {
+    let damp_path = resolve_damp_path();
+    let env_path = damp_path.join(".env");
+    if let Ok(content) = std::fs::read_to_string(&env_path) {
+        for line in content.lines() {
+            if line.starts_with("DAMP_TLD=") {
+                return line.trim_start_matches("DAMP_TLD=").trim().to_string();
+            }
+        }
     }
-
-    let output = Command::new("docker")
-        .args(["compose", "up", "-d"])
-        .current_dir(&p)
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
-    }
-    Ok("Project started".to_string())
+    env::var("DAMP_TLD").unwrap_or_else(|_| "test".to_string())
 }
 
-#[tauri::command]
-fn stop_project(path: String) -> Result<String, String> {
-    let p = PathBuf::from(&path);
-    if !p.exists() {
-        return Err("Project path not found".to_string());
-    }
+fn query_redis_info(host: &str, port: u16) -> RedisInfo {
+    let addr = format!("{}:{}", host, port);
+    let mut stream =
+        match TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(2)) {
+            Ok(s) => s,
+            Err(_) => {
+                return RedisInfo {
+                    connected: false,
+                    version: String::new(),
+                    memory: String::new(),
+                    keys: 0,
+                }
+            }
+        };
 
-    let output = Command::new("docker")
-        .args(["compose", "stop"])
-        .current_dir(&p)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let _ = stream.write_all(b"INFO server\r\nDBSIZE\r\n");
+    let _ = stream.flush();
 
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    let mut buf = [0u8; 8192];
+    let n = match stream.read(&mut buf) {
+        Ok(n) if n > 0 => n,
+        _ => {
+            return RedisInfo {
+                connected: false,
+                version: String::new(),
+                memory: String::new(),
+                keys: 0,
+            }
+        }
+    };
+
+    let info = String::from_utf8_lossy(&buf[..n]);
+
+    let version = info
+        .lines()
+        .find(|l| l.starts_with("redis_version:"))
+        .map(|l| l.trim_start_matches("redis_version:").to_string())
+        .unwrap_or_default();
+
+    let memory = info
+        .lines()
+        .find(|l| l.starts_with("used_memory_human:"))
+        .map(|l| l.trim_start_matches("used_memory_human:").to_string())
+        .unwrap_or_default();
+
+    let keys_str = info
+        .lines()
+        .find(|l| l.starts_with("db0:keys="))
+        .and_then(|l| {
+            let start = l.find("keys=")?;
+            let rest = &l[start + 5..];
+            let end = rest.find(',').unwrap_or(rest.len());
+            Some(rest[..end].to_string())
+        })
+        .unwrap_or_else(|| "0".to_string());
+
+    let keys: i64 = keys_str.parse().unwrap_or(0);
+
+    let mut stream2 =
+        match TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(2)) {
+            Ok(s) => s,
+            Err(_) => {
+                return RedisInfo {
+                    connected: true,
+                    version,
+                    memory,
+                    keys,
+                }
+            }
+        };
+    let _ = stream2.write_all(b"DBSIZE\r\n");
+    let _ = stream2.flush();
+    let mut buf2 = [0u8; 1024];
+    let n2 = stream2.read(&mut buf2).unwrap_or(0);
+    let resp = String::from_utf8_lossy(&buf2[..n2]);
+    let parsed_keys: i64 = resp
+        .lines()
+        .find(|l| l.starts_with(":"))
+        .and_then(|l| l.trim_start_matches(':').trim().parse().ok())
+        .unwrap_or(keys);
+
+    RedisInfo {
+        connected: true,
+        version,
+        memory,
+        keys: parsed_keys,
     }
-    Ok("Project stopped".to_string())
 }
 
 #[tauri::command]
 fn get_status() -> DampStatus {
     let damp_path = resolve_damp_path();
     let docker_bin = get_docker_path();
+    let tld = get_tld();
 
     let docker_installed = Command::new(&docker_bin).arg("--version").output().is_ok();
     let orbstack_installed = PathBuf::from("/Applications/OrbStack.app").exists();
@@ -122,10 +198,16 @@ fn get_status() -> DampStatus {
     };
 
     let mut container_list = Vec::new();
-    let mut db_list = Vec::new();
+    let mut mysql_dbs = Vec::new();
+    let mut pg_dbs = Vec::new();
+    let redis_info = RedisInfo {
+        connected: false,
+        version: String::new(),
+        memory: String::new(),
+        keys: 0,
+    };
 
     if docker_running {
-        // Use a more robust ps command
         if let Ok(output) = Command::new(&docker_bin)
             .args(["ps", "-a", "--format", "{{.Names}}|{{.State}}"])
             .output()
@@ -136,19 +218,18 @@ fn get_status() -> DampStatus {
                 if parts.len() == 2 {
                     container_list.push(Container {
                         name: parts[0].to_string(),
-                        status: parts[1].to_string(), // "running", "exited", etc.
+                        status: parts[1].to_string(),
                         is_damp: parts[0].starts_with("damp-"),
                     });
                 }
             }
         }
 
-        // Get MySQL databases only if damp-db is running
         if container_list
             .iter()
             .any(|c| c.name == "damp-db" && c.status == "running")
         {
-            let mysql_out = Command::new(&docker_bin)
+            if let Ok(o) = Command::new(&docker_bin)
                 .args([
                     "exec",
                     "damp-db",
@@ -159,9 +240,8 @@ fn get_status() -> DampStatus {
                     "-e",
                     "SHOW DATABASES;",
                 ])
-                .output();
-
-            if let Ok(o) = mysql_out {
+                .output()
+            {
                 let stdout = String::from_utf8_lossy(&o.stdout);
                 for line in stdout.lines() {
                     let db = line.trim();
@@ -171,7 +251,7 @@ fn get_status() -> DampStatus {
                             "information_schema" | "mysql" | "performance_schema" | "sys"
                         )
                     {
-                        db_list.push(Database {
+                        mysql_dbs.push(Database {
                             name: db.to_string(),
                             engine: "mysql".to_string(),
                         });
@@ -179,15 +259,59 @@ fn get_status() -> DampStatus {
                 }
             }
         }
+
+        if container_list
+            .iter()
+            .any(|c| c.name == "damp-postgres" && c.status == "running")
+        {
+            if let Ok(o) = Command::new(&docker_bin)
+                .args([
+                    "exec",
+                    "damp-postgres",
+                    "psql",
+                    "-U",
+                    "root",
+                    "-t",
+                    "-c",
+                    "SELECT datname FROM pg_database WHERE datistemplate = false;",
+                ])
+                .output()
+            {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                for line in stdout.lines() {
+                    let db = line.trim();
+                    if !db.is_empty() {
+                        pg_dbs.push(Database {
+                            name: db.to_string(),
+                            engine: "postgres".to_string(),
+                        });
+                    }
+                }
+            }
+        }
     }
+
+    let redis = if docker_running
+        && container_list
+            .iter()
+            .any(|c| c.name == "damp-redis" && c.status == "running")
+    {
+        let host = env::var("REDIS_HOST").unwrap_or_else(|_| "localhost".to_string());
+        query_redis_info(&host, 6379)
+    } else {
+        redis_info
+    };
 
     DampStatus {
         docker_running,
         docker_installed,
         orbstack_installed,
         damp_path: damp_path.display().to_string(),
+        tld,
         containers: container_list,
-        databases: db_list,
+        databases: mysql_dbs,
+        postgres_databases: pg_dbs,
+        redis,
     }
 }
 
@@ -228,6 +352,75 @@ fn damp_down() -> Result<String, String> {
 }
 
 #[tauri::command]
+fn damp_restart() -> Result<String, String> {
+    let damp_path = resolve_damp_path();
+    let docker_bin = get_docker_path();
+    Command::new(&docker_bin)
+        .args(["compose", "restart"])
+        .current_dir(&damp_path)
+        .output()
+        .map(|o| {
+            if o.status.success() {
+                "DAMP restarted".to_string()
+            } else {
+                String::from_utf8_lossy(&o.stderr).to_string()
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn start_project(path: String) -> Result<String, String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() {
+        return Err("Project path not found".to_string());
+    }
+    let output = Command::new("docker")
+        .args(["compose", "up", "-d"])
+        .current_dir(&p)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    Ok("Project started".to_string())
+}
+
+#[tauri::command]
+fn stop_project(path: String) -> Result<String, String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() {
+        return Err("Project path not found".to_string());
+    }
+    let output = Command::new("docker")
+        .args(["compose", "stop"])
+        .current_dir(&p)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    Ok("Project stopped".to_string())
+}
+
+#[tauri::command]
+fn restart_project(path: String) -> Result<String, String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() {
+        return Err("Project path not found".to_string());
+    }
+    let output = Command::new("docker")
+        .args(["compose", "restart"])
+        .current_dir(&p)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    Ok("Project restarted".to_string())
+}
+
+#[tauri::command]
 fn create_database(name: String, engine: String) -> Result<String, String> {
     let docker_bin = get_docker_path();
     if engine == "mysql" {
@@ -240,7 +433,7 @@ fn create_database(name: String, engine: String) -> Result<String, String> {
             .output()
             .map(|o| {
                 if o.status.success() {
-                    format!("MySQL Database '{}' created", name)
+                    format!("MySQL database '{}' created", name)
                 } else {
                     String::from_utf8_lossy(&o.stderr).to_string()
                 }
@@ -253,7 +446,7 @@ fn create_database(name: String, engine: String) -> Result<String, String> {
             .output()
             .map(|o| {
                 if o.status.success() {
-                    format!("Postgres Database '{}' created", name)
+                    format!("Postgres database '{}' created", name)
                 } else {
                     String::from_utf8_lossy(&o.stderr).to_string()
                 }
@@ -274,7 +467,7 @@ fn drop_database(name: String, engine: String) -> Result<String, String> {
             .output()
             .map(|o| {
                 if o.status.success() {
-                    format!("MySQL Database '{}' dropped", name)
+                    format!("MySQL database '{}' dropped", name)
                 } else {
                     String::from_utf8_lossy(&o.stderr).to_string()
                 }
@@ -287,7 +480,7 @@ fn drop_database(name: String, engine: String) -> Result<String, String> {
             .output()
             .map(|o| {
                 if o.status.success() {
-                    format!("Postgres Database '{}' dropped", name)
+                    format!("Postgres database '{}' dropped", name)
                 } else {
                     String::from_utf8_lossy(&o.stderr).to_string()
                 }
@@ -299,6 +492,73 @@ fn drop_database(name: String, engine: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn start_container(name: String) -> Result<String, String> {
+    let docker_bin = get_docker_path();
+    Command::new(&docker_bin)
+        .args(["start", &name])
+        .output()
+        .map(|o| {
+            if o.status.success() {
+                format!("Container '{}' started", name)
+            } else {
+                String::from_utf8_lossy(&o.stderr).to_string()
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn stop_container(name: String) -> Result<String, String> {
+    let docker_bin = get_docker_path();
+    Command::new(&docker_bin)
+        .args(["stop", &name])
+        .output()
+        .map(|o| {
+            if o.status.success() {
+                format!("Container '{}' stopped", name)
+            } else {
+                String::from_utf8_lossy(&o.stderr).to_string()
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn restart_container(name: String) -> Result<String, String> {
+    let docker_bin = get_docker_path();
+    Command::new(&docker_bin)
+        .args(["restart", &name])
+        .output()
+        .map(|o| {
+            if o.status.success() {
+                format!("Container '{}' restarted", name)
+            } else {
+                String::from_utf8_lossy(&o.stderr).to_string()
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_container_logs(name: String, tail: Option<u32>) -> Result<String, String> {
+    let docker_bin = get_docker_path();
+    let tail_val = tail.unwrap_or(200);
+    Command::new(&docker_bin)
+        .args(["logs", "--tail", &tail_val.to_string(), &name])
+        .output()
+        .map(|o| {
+            let stdout = String::from_utf8_lossy(&o.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&o.stderr).to_string();
+            if stderr.is_empty() {
+                stdout
+            } else {
+                format!("{}\n{}", stdout, stderr)
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let cmd = "open";
@@ -306,7 +566,6 @@ fn open_url(url: String) -> Result<(), String> {
     let cmd = "xdg-open";
     #[cfg(target_os = "windows")]
     let cmd = "explorer";
-
     Command::new(cmd)
         .arg(&url)
         .spawn()
@@ -336,7 +595,6 @@ fn create_project(name: String, template: String) -> Result<String, String> {
     let docker_bin = get_docker_path();
     let project_path = damp_path.join(&name);
 
-    // 1. Create project files
     let output = Command::new("bash")
         .arg(damp_script)
         .arg("new")
@@ -350,7 +608,6 @@ fn create_project(name: String, template: String) -> Result<String, String> {
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
 
-    // 2. Start the project automatically
     let _ = Command::new(&docker_bin)
         .args(["compose", "up", "-d"])
         .current_dir(&project_path)
@@ -359,7 +616,7 @@ fn create_project(name: String, template: String) -> Result<String, String> {
     Ok(format!("Project '{}' created and started", name))
 }
 
-#[derive(Serialize, serde::Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Project {
     name: String,
     path: String,
@@ -367,7 +624,9 @@ pub struct Project {
 }
 
 fn get_registry_path() -> PathBuf {
-    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let home = env::var("HOME")
+        .or_else(|_| env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
     PathBuf::from(home).join(".damp").join("projects.json")
 }
 
@@ -418,6 +677,66 @@ fn remove_project(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn delete_project(path: String) -> Result<String, String> {
+    let damp_path = resolve_damp_path();
+    let docker_bin = get_docker_path();
+    let project_path = PathBuf::from(&path);
+    let project_name = project_path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+
+    let _ = Command::new(&docker_bin)
+        .args(["compose", "down"])
+        .current_dir(&project_path)
+        .output();
+
+    let caddy_file = damp_path
+        .join("caddy")
+        .join("projects.d")
+        .join(format!("{}.caddy", project_name));
+    let _ = std::fs::remove_file(caddy_file);
+
+    let db_name = project_name.replace('-', "_");
+    let _ = Command::new(&docker_bin)
+        .args([
+            "exec",
+            "damp-db",
+            "mysql",
+            "-uroot",
+            "-proot",
+            "-e",
+            &format!("DROP DATABASE IF EXISTS `{}`", db_name),
+        ])
+        .output();
+    let _ = Command::new(&docker_bin)
+        .args([
+            "exec",
+            "damp-postgres",
+            "psql",
+            "-U",
+            "root",
+            "-c",
+            &format!("DROP DATABASE IF EXISTS \"{}\"", db_name),
+        ])
+        .output();
+
+    let damp_script = damp_path.join("bin").join("damp");
+    let _ = Command::new("bash")
+        .arg(damp_script)
+        .arg("reload")
+        .current_dir(&damp_path)
+        .output();
+
+    let mut projects = load_projects_registry();
+    projects.retain(|p| p.path != path);
+    save_projects_registry(&projects)?;
+
+    Ok(format!("Project '{}' fully deleted", project_name))
+}
+
+#[tauri::command]
 fn adopt_project(path: String, template: String) -> Result<String, String> {
     let damp_path = resolve_damp_path();
     let project_path = PathBuf::from(&path);
@@ -433,7 +752,6 @@ fn adopt_project(path: String, template: String) -> Result<String, String> {
         .to_string_lossy()
         .to_string();
 
-    // 1. Copy template files
     let entries = std::fs::read_dir(&template_path).map_err(|e| e.to_string())?;
     for entry in entries.filter_map(|e| e.ok()) {
         let name = entry.file_name();
@@ -453,9 +771,7 @@ fn adopt_project(path: String, template: String) -> Result<String, String> {
         }
     }
 
-    // 2. Generate Caddy config for this project
-    // We assume the project runs on port 80 inside its own container (standard in our templates)
-    let tld = env::var("DAMP_TLD").unwrap_or_else(|_| "test".to_string());
+    let tld = get_tld();
     let caddy_conf = format!(
         "{}.{} {{\n    reverse_proxy {}-app:80\n}}\n",
         project_name, tld, project_name
@@ -466,7 +782,6 @@ fn adopt_project(path: String, template: String) -> Result<String, String> {
         .join(format!("{}.caddy", project_name));
     std::fs::write(caddy_file_path, caddy_conf).map_err(|e| e.to_string())?;
 
-    // 3. Reload Caddy via damp script
     let damp_script = damp_path.join("bin").join("damp");
     let _ = Command::new("bash")
         .arg(damp_script)
@@ -474,7 +789,6 @@ fn adopt_project(path: String, template: String) -> Result<String, String> {
         .current_dir(&damp_path)
         .output();
 
-    // 4. Register in projects.json
     add_project(project_name.clone(), path.clone(), template.clone())?;
 
     Ok(format!(
@@ -498,12 +812,31 @@ fn detect_project_type(path: String) -> Result<ProjectSuggestion, String> {
     }
 
     let mut detected_files = Vec::new();
-    let mut suggestion = "frankenphp".to_string(); // Default
+    let mut suggestion = "frankenphp".to_string();
 
-    // Logic to detect project type
     if p.join("wp-config.php").exists() || p.join("wp-content").exists() {
         suggestion = "wordpress".to_string();
         detected_files.push("WordPress files found".to_string());
+    } else if let Ok(content) = std::fs::read_to_string(p.join("composer.json")) {
+        let json: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
+        let req = json.get("require").unwrap_or(&serde_json::Value::Null);
+        if req.get("laravel/framework").is_some() {
+            suggestion = "frankenphp".to_string();
+            detected_files.push("Laravel detected (composer.json)".to_string());
+        } else if req.get("codeigniter4/framework").is_some()
+            || req.get("codeigniter4/codeigniter4").is_some()
+        {
+            suggestion = "frankenphp".to_string();
+            detected_files.push("CodeIgniter 4 detected (composer.json)".to_string());
+        } else if req.get("symfony/symfony").is_some()
+            || req.get("symfony/framework-bundle").is_some()
+        {
+            suggestion = "frankenphp".to_string();
+            detected_files.push("Symfony detected (composer.json)".to_string());
+        }
+        if detected_files.is_empty() {
+            detected_files.push("composer.json found".to_string());
+        }
     } else if p.join("package.json").exists() {
         suggestion = "node".to_string();
         detected_files.push("package.json found".to_string());
@@ -533,11 +866,12 @@ pub fn run() {
                 )?;
             }
 
-            // --- System Tray ---
+            let tld = get_tld();
+
             let quit_i = MenuItem::with_id(app, "quit", "Quit DAMP", true, None::<&str>)?;
-            let show_i = MenuItem::with_id(app, "show", "Show App", true, None::<&str>)?;
-            let start_i = MenuItem::with_id(app, "start", "Start DAMP", true, None::<&str>)?;
-            let stop_i = MenuItem::with_id(app, "stop", "Stop DAMP", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Show DAMP", true, None::<&str>)?;
+            let start_i = MenuItem::with_id(app, "start", "Start Engine", true, None::<&str>)?;
+            let stop_i = MenuItem::with_id(app, "stop", "Stop Engine", true, None::<&str>)?;
             let pma_i = MenuItem::with_id(app, "pma", "Open PHPMyAdmin", true, None::<&str>)?;
             let mail_i = MenuItem::with_id(app, "mail", "Open Mailpit", true, None::<&str>)?;
 
@@ -556,6 +890,7 @@ pub fn run() {
                 ],
             )?;
 
+            let tld_for_tray = tld.clone();
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&tray_menu)
@@ -576,10 +911,10 @@ pub fn run() {
                         let _ = damp_down();
                     }
                     "pma" => {
-                        let _ = open_url("http://localhost:8080".to_string());
+                        let _ = open_url(format!("https://pma.{}", tld_for_tray));
                     }
                     "mail" => {
-                        let _ = open_url("http://localhost:8025".to_string());
+                        let _ = open_url(format!("https://mail.{}", tld_for_tray));
                     }
                     _ => {}
                 })
@@ -605,8 +940,16 @@ pub fn run() {
             get_status,
             damp_up,
             damp_down,
+            damp_restart,
+            start_project,
+            stop_project,
+            restart_project,
             create_database,
             drop_database,
+            start_container,
+            stop_container,
+            restart_container,
+            get_container_logs,
             open_url,
             get_templates,
             create_project,
@@ -615,8 +958,7 @@ pub fn run() {
             adopt_project,
             add_project,
             remove_project,
-            start_project,
-            stop_project,
+            delete_project,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

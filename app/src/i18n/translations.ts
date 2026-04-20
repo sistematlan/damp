@@ -1,0 +1,151 @@
+const translations: Record<string, Record<string, string>> = {
+  en: {
+    overview: "Overview",
+    projects: "Projects",
+    databases: "Databases",
+    logs: "Logs",
+    startEngine: "Start Engine",
+    stopEngine: "Stop Engine",
+    engineRunning: "Running",
+    engineOffline: "Offline",
+    dockerNotInstalled: "Docker not installed",
+    version: "Version",
+    services: "Services",
+    registeredProjects: "Projects",
+    createdDatabases: "Databases",
+    noServices: "No services running",
+    noProjects: "No projects registered",
+    noProjectsDesc: "Create a new project or adopt an existing folder to get started.",
+    newProject: "New Project",
+    adoptFolder: "Adopt Folder",
+    projectName: "Project name",
+    selectTemplate: "Select template",
+    create: "Create",
+    cancel: "Cancel",
+    confirm: "Confirm",
+    start: "Start",
+    stop: "Stop",
+    restart: "Restart",
+    delete: "Delete",
+    open: "Open",
+    remove: "Remove",
+    confirmDelete: "Delete this project? This will stop containers, remove config, and drop the database.",
+    creating: "Creating...",
+    starting: "Starting...",
+    stopping: "Stopping...",
+    mysqlDatabases: "MySQL Databases",
+    postgresDatabases: "PostgreSQL Databases",
+    redisStatus: "Redis",
+    newDb: "New database",
+    dbName: "Database name",
+    createDb: "Create",
+    dropDb: "Drop database",
+    confirmDropDb: "Drop database",
+    connected: "Connected",
+    offline: "Offline",
+    version_: "Version",
+    memory: "Memory",
+    keys: "Keys",
+    selectContainer: "Select container",
+    clearLogs: "Clear",
+    autoScroll: "Auto-scroll",
+    noLogs: "Select a container to view logs",
+    copyingLogs: "Logs will appear here...",
+    quickLinks: "Quick Links",
+    phpmyadmin: "PHPMyAdmin",
+    mailpit: "Mailpit",
+    dashboard: "Dashboard",
+    port: "Port",
+    projectCreated: "Project created",
+    projectAdopted: "Project adopted",
+    detectedAs: "Detected as",
+    confirmAdopt: "Adopt with template",
+  },
+  es: {
+    overview: "Resumen",
+    projects: "Proyectos",
+    databases: "Bases de Datos",
+    logs: "Logs",
+    startEngine: "Iniciar Motor",
+    stopEngine: "Detener Motor",
+    engineRunning: "Activo",
+    engineOffline: "Inactivo",
+    dockerNotInstalled: "Docker no instalado",
+    version: "Versión",
+    services: "Servicios",
+    registeredProjects: "Proyectos",
+    createdDatabases: "Bases de datos",
+    noServices: "Sin servicios activos",
+    noProjects: "Sin proyectos registrados",
+    noProjectsDesc: "Crea un proyecto nuevo o adopta una carpeta existente para comenzar.",
+    newProject: "Nuevo Proyecto",
+    adoptFolder: "Adoptar Carpeta",
+    projectName: "Nombre del proyecto",
+    selectTemplate: "Seleccionar template",
+    create: "Crear",
+    cancel: "Cancelar",
+    confirm: "Confirmar",
+    start: "Iniciar",
+    stop: "Detener",
+    restart: "Reiniciar",
+    delete: "Eliminar",
+    open: "Abrir",
+    remove: "Quitar",
+    confirmDelete: "Eliminar este proyecto? Se detendran los containers, se eliminara la config y la base de datos.",
+    creating: "Creando...",
+    starting: "Iniciando...",
+    stopping: "Deteniendo...",
+    mysqlDatabases: "Bases MySQL",
+    postgresDatabases: "Bases PostgreSQL",
+    redisStatus: "Redis",
+    newDb: "Nueva base de datos",
+    dbName: "Nombre de la base",
+    createDb: "Crear",
+    dropDb: "Eliminar base",
+    confirmDropDb: "Eliminar base de datos",
+    connected: "Conectado",
+    offline: "Desconectado",
+    version_: "Version",
+    memory: "Memoria",
+    keys: "Claves",
+    selectContainer: "Seleccionar container",
+    clearLogs: "Limpiar",
+    autoScroll: "Auto-scroll",
+    noLogs: "Selecciona un container para ver logs",
+    copyingLogs: "Los logs apareceran aqui...",
+    quickLinks: "Accesos Directos",
+    phpmyadmin: "PHPMyAdmin",
+    mailpit: "Mailpit",
+    dashboard: "Dashboard",
+    port: "Puerto",
+    projectCreated: "Proyecto creado",
+    projectAdopted: "Proyecto adoptado",
+    detectedAs: "Detectado como",
+    confirmAdopt: "Adoptar con template",
+  },
+};
+
+let currentLang = "en";
+
+export function initLang(): string {
+  const saved = localStorage.getItem("damp-lang");
+  if (saved && translations[saved]) {
+    currentLang = saved;
+  }
+  return currentLang;
+}
+
+export function setLang(lang: string): void {
+  if (translations[lang]) {
+    currentLang = lang;
+    localStorage.setItem("damp-lang", lang);
+  }
+}
+
+export function getLang(): string {
+  return currentLang;
+}
+
+export function t(key: string): string {
+  return translations[currentLang]?.[key] || translations.en?.[key] || key;
+}
