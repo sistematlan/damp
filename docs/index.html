@@ -23,6 +23,10 @@
         <div class="nav-links">
           <a href="#features">Funciones</a>
           <a href="#how">Como funciona</a>
+          <a href="#docs">Guía</a>
+          <a href="#commands">Comandos</a>
+          <a href="#dashboard">Dashboard</a>
+          <a href="#troubleshooting">Problemas</a>
           <a href="#faq">FAQ</a>
           <a href="https://github.com/sistematlan/damp" target="_blank" class="btn btn-ghost">⭐ GitHub</a>
           <a href="#download" class="btn btn-primary">Obtener DAMP</a>
@@ -93,10 +97,10 @@
             <div class="line"><span class="prompt">$</span> ./damp new frankenphp mi-tienda</div>
             <div class="line ok">  ✓ Proyecto 'mi-tienda' creado</div>
             <div class="line"></div>
-            <div class="line"><span class="prompt">$</span> ./damp add-host mi-tienda.local</div>
-            <div class="line ok">  ✓ mi-tienda.local agregado</div>
+            <div class="line"><span class="prompt">$</span> ./damp trust</div>
+            <div class="line ok">  ✓ Certificados locales confiables instalados</div>
             <div class="line"></div>
-            <div class="line dim">  → https://mi-tienda.local 🔒</div>
+            <div class="line dim">  → https://mi-tienda.test 🔒</div>
           </div>
         </div>
       </div>
@@ -110,17 +114,17 @@
           <div class="feature-card">
             <div class="feature-icon">🔒</div>
             <h3>Adiós warnings SSL</h3>
-            <p>Cada dominio .local obtiene un certificado SSL válido automáticamente. Olvídate de los errores de seguridad en el navegador. Igual que en producción.</p>
+            <p>Cada dominio .test obtiene un certificado SSL válido automáticamente. Olvídate de los errores de seguridad en el navegador. Igual que en producción.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">🗄️</div>
             <h3>MySQL compartido</h3>
-            <p>Un servidor MySQL optimizado para todos tus proyectos. PHPMyAdmin incluido en pma.local. Crea y administra bases de datos con un comando.</p>
+            <p>Un servidor MySQL optimizado para todos tus proyectos. PHPMyAdmin incluido en pma.test. Crea y administra bases de datos con un comando.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">📬</div>
             <h3>Correo local seguro</h3>
-            <p>Mailpit atrapa todos tus correos de prueba. Ningún email saldrá a internet por error. Panel web en mail.local para revisar tus envíos.</p>
+            <p>Mailpit atrapa todos tus correos de prueba. Ningún email saldrá a internet por error. Panel web en mail.test para revisar tus envíos.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">🐘</div>
@@ -130,7 +134,7 @@
           <div class="feature-card">
             <div class="feature-icon">🌐</div>
             <h3>Multi-proyecto real</h3>
-            <p>Levanta 10 proyectos al mismo tiempo con su propio dominio .local. Se acabaron los "localhost:8080" y "localhost:8081".</p>
+            <p>Levanta 10 proyectos al mismo tiempo con su propio dominio .test. Se acabaron los "localhost:8080" y "localhost:8081".</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">📦</div>
@@ -154,17 +158,17 @@
           <div class="arch-projects">
             <div class="arch-project">
               <span class="arch-dot"></span>
-              mi-tienda.local
+              mi-tienda.test
               <span class="arch-tag">PHP 8.4</span>
             </div>
             <div class="arch-project">
               <span class="arch-dot"></span>
-              legacy-app.local
+              legacy-app.test
               <span class="arch-tag">PHP 7.4</span>
             </div>
             <div class="arch-project">
               <span class="arch-dot"></span>
-              dashboard.local
+              dashboard.test
               <span class="arch-tag">React</span>
             </div>
           </div>
@@ -227,8 +231,188 @@
               <span class="template-name">Node.js</span>
             </div>
             <div class="template-php">Node 22</div>
-            <p>React, Vue, Astro, Next.js. Porque no todo es PHP, y tu frontend también merece .local.</p>
+            <p>React, Vue, Astro, Next.js. Porque no todo es PHP, y tu frontend también merece .test.</p>
             <code class="template-cmd">./damp new node mi-app</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ DOCS QUICKSTART ═══ -->
+    <section id="docs" class="how">
+      <div class="container">
+        <h2>Guía de inicio rápido</h2>
+        <p class="section-sub">En menos de 3 minutos tienes tu primer proyecto corriendo con HTTPS y DNS local.</p>
+
+        <div class="faq-list">
+          <div class="faq-item">
+            <h4 class="faq-question">1) Instala DAMP</h4>
+            <p class="faq-answer">
+              <code class="template-cmd">git clone https://github.com/sistematlan/damp.git</code>
+              <br>
+              <code class="template-cmd">cd damp</code>
+              <br>
+              <code class="template-cmd">./install.sh</code>
+            </p>
+            <p class="faq-answer">Al finalizar, DAMP arranca la infraestructura base y configura DNS para dominios <strong>.test</strong>.</p>
+          </div>
+
+          <div class="faq-item">
+            <h4 class="faq-question">2) Abre el dashboard y valida estado</h4>
+            <p class="faq-answer">Visita <a href="https://damp.test" target="_blank">https://damp.test</a> para ver servicios, contenedores, logs y acciones rápidas.</p>
+            <p class="faq-answer">
+              <code class="template-cmd">damp status</code>
+              <br>
+              <code class="template-cmd">damp up</code>
+            </p>
+          </div>
+
+          <div class="faq-item">
+            <h4 class="faq-question">3) Crea tu primer proyecto (nueva app)</h4>
+            <p class="faq-answer">Desde consola o dashboard. Recomendado por plantilla rápida:</p>
+            <p class="faq-answer">
+              <code class="template-cmd">damp new frankenphp mi-tienda</code>
+            </p>
+            <p class="faq-answer">Luego abre <strong>https://mi-tienda.test</strong>.</p>
+          </div>
+
+          <div class="faq-item">
+            <h4 class="faq-question">4) Importa proyecto existente</h4>
+            <p class="faq-answer">Desde el proyecto existente:</p>
+            <p class="faq-answer">
+              <code class="template-cmd">cd ~/proyectos/mi-proyecto</code>
+              <br>
+              <code class="template-cmd">damp init</code>
+            </p>
+            <p class="faq-answer">El asistente detecta stack y genera <strong>Dampfile</strong> + <strong>docker-compose.yml</strong> + DB + certificados.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ COMMAND REFERENCE ═══ -->
+    <section id="commands" class="features">
+      <div class="container">
+        <h2>Referencia rápida de comandos</h2>
+        <p class="section-sub">Comandos más usados para operar entornos de forma diaria.</p>
+
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">🚀</div>
+            <h3>Motor principal</h3>
+            <p><code class="template-cmd">damp up</code>, <code class="template-cmd">damp down</code>, <code class="template-cmd">damp restart</code>, <code class="template-cmd">damp status</code></p>
+            <p>Inicia, para y reinicia el stack base de DAMP.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">📁</div>
+            <h3>Proyectos</h3>
+            <p><code class="template-cmd">damp new [template] [name]</code></p>
+            <p><code class="template-cmd">damp init</code></p>
+            <p><code class="template-cmd">damp start|stop [name]</code></p>
+            <p><code class="template-cmd">damp list</code></p>
+            <p>También puedes usar <code>damp exec</code> para comandos internos, p. ej. <code>damp exec php artisan migrate</code>.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">🗄️</div>
+            <h3>Base de datos</h3>
+            <p><code class="template-cmd">damp databases</code></p>
+            <p><code class="template-cmd">damp create-db mi_bd</code></p>
+            <p><code class="template-cmd">damp drop-db mi_bd</code></p>
+            <p><code class="template-cmd">damp export mi_bd</code></p>
+            <p><code class="template-cmd">damp import mi_bd backup.sql</code></p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">🔧</div>
+            <h3>Mantenimiento y red</h3>
+            <p><code class="template-cmd">damp setup-dns</code></p>
+            <p><code class="template-cmd">damp trust</code></p>
+            <p><code class="template-cmd">damp reload</code></p>
+            <p><code class="template-cmd">damp add-host dominio</code> (modo fallback)</p>
+            <p><code class="template-cmd">damp update</code> y <code class="template-cmd">damp help</code></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ DASHBOARD ──── -->
+    <section id="dashboard" class="templates">
+      <div class="container">
+        <h2>Dashboard web: flujo recomendado</h2>
+        <p class="section-sub">Todo lo que importa para gestionar proyectos desde navegador.</p>
+        <div class="template-grid">
+          <div class="template-card">
+            <div class="template-header">
+              <span class="template-icon">🧩</span>
+              <span class="template-name">Importar proyecto</span>
+            </div>
+            <p>Usa el botón <strong>Adopt Existing Folder</strong> y el selector de ruta para enlazar repos existentes.</p>
+            <p>El asistente detecta tipo de proyecto, genera <strong>Dampfile</strong>, crea DB y arranca contenedores en segundo plano.</p>
+          </div>
+
+          <div class="template-card">
+            <div class="template-header">
+              <span class="template-icon">🧯</span>
+              <span class="template-name">Borrado seguro</span>
+            </div>
+            <p>Al eliminar proyecto, DAMP hace backup automático de la base de datos (si existe) antes de eliminar.</p>
+            <p>El archivo queda en la raíz del proyecto con nombre:
+              <code class="template-cmd">proyecto_db_dump_YYYYMMDD_HHMMSS.sql</code></p>
+          </div>
+
+          <div class="template-card">
+            <div class="template-header">
+              <span class="template-icon">⏱️</span>
+              <span class="template-name">Arranque inteligente</span>
+            </div>
+            <p>Después de crear/importar, revisa estado "starting" y espera 20-40 segundos para evitar errores de 502 por contenedor aún levantándose.</p>
+          </div>
+
+          <div class="template-card">
+            <div class="template-header">
+              <span class="template-icon">📡</span>
+              <span class="template-name">Logs y monitoreo</span>
+            </div>
+            <p>La pestaña Logs muestra actividad en tiempo real por contenedor para detectar fallos de PHP, Node o base de datos rápidamente.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ TROUBLESHOOTING ═══ -->
+    <section id="troubleshooting" class="faq">
+      <div class="container">
+        <h2>Solución de problemas</h2>
+        <div class="faq-list">
+          <div class="faq-item">
+            <h4 class="faq-question">Mi dominio no carga o no resuelve</h4>
+            <p class="faq-answer">
+              1. Ejecuta <code class="template-cmd">damp setup-dns</code><br>
+              2. Verifica <code class="template-cmd">damp trust</code><br>
+              3. Reabre navegador y limpia caché en caso de certificado viejo.
+            </p>
+          </div>
+
+          <div class="faq-item">
+            <h4 class="faq-question">La URL responde 502 al abrir recién importado</h4>
+            <p class="faq-answer">Es normal los primeros segundos. Espera 20-30s y vuelve a refrescar. Si persiste, revisa logs del proyecto desde dashboard o ejecuta <code class="template-cmd">damp start &lt;proyecto&gt;</code>.</p>
+          </div>
+
+          <div class="faq-item">
+            <h4 class="faq-question">¿Dónde se guardan los backups al eliminar un proyecto?</h4>
+            <p class="faq-answer">En la carpeta del proyecto, con patrón <code>nombre_db_dump_YYYYMMDD_HHMMSS.sql</code>. Esta ruta se devuelve en la respuesta de API y aparece en la alerta de UI.</p>
+          </div>
+
+          <div class="faq-item">
+            <h4 class="faq-question">¿Qué pasa con los archivos del proyecto al eliminar?</h4>
+            <p class="faq-answer">Nunca se borran. Se eliminan configuración de proxy, contenedores y base de datos, pero el directorio del proyecto queda intacto.</p>
+          </div>
+
+          <div class="faq-item">
+            <h4 class="faq-question">¿Puedo usar una TLD distinta?</h4>
+            <p class="faq-answer">Sí. Cambia <code>DAMP_TLD</code> en <code>core/.env</code> y ejecuta <code>damp setup-dns</code> + <code>damp reload</code>.</p>
           </div>
         </div>
       </div>
@@ -241,19 +425,19 @@
         <div class="faq-list">
           <div class="faq-item">
             <h4 class="faq-question">¿DAMP ensucia mi sistema operativo?</h4>
-            <p class="faq-answer">En absoluto. Todo DAMP corre dentro de contenedores Docker. Tu Mac, Linux o Windows se mantiene completamente limpio de bases de datos o versiones de PHP conflictivas.</p>
+            <p class="faq-answer">No. DAMP ejecuta los servicios dentro de Docker y evita instalar PHP/MySQL en el sistema host.</p>
           </div>
           <div class="faq-item">
-            <h4 class="faq-question">¿Funciona en Windows?</h4>
-            <p class="faq-answer">Sí. Aunque tenemos una App gráfica exclusiva para macOS, el CLI de DAMP funciona perfectamente en Linux y en Windows a través de WSL2.</p>
+            <h4 class="faq-question">¿Funciona en Linux y WSL2?</h4>
+            <p class="faq-answer">Sí. Actualmente está orientado a macOS en la App, y completamente funcional con CLI en Linux y WSL2.</p>
           </div>
           <div class="faq-item">
-            <h4 class="faq-question">¿Puedo usar diferentes versiones de PHP a la vez?</h4>
-            <p class="faq-answer">Totalmente. Puedes tener un proyecto corriendo en PHP 5.6 (legacy) y otro en PHP 8.4 (frankenphp) al mismo tiempo en el mismo navegador. DAMP enruta el tráfico al contenedor correcto.</p>
+            <h4 class="faq-question">¿Puedo usar varias versiones de PHP al mismo tiempo?</h4>
+            <p class="faq-answer">Sí. DAMP permite mezclar stacks antiguos y modernos en paralelo (7.4, 8.4, 5.6, Node) y enruta cada dominio a su contenedor correcto.</p>
           </div>
           <div class="faq-item">
-            <h4 class="faq-question">¿Es gratis para uso comercial?</h4>
-            <p class="faq-answer">Sí, DAMP es 100% open source y gratuito. Puedes usarlo para proyectos personales, freelance o dentro de tu empresa sin restricciones.</p>
+            <h4 class="faq-question">¿Puedo usar DAMP en proyectos comerciales?</h4>
+            <p class="faq-answer">Sí. Es open source y sin restricciones de licencia para uso personal o corporativo.</p>
           </div>
         </div>
       </div>
@@ -269,7 +453,7 @@
             <div class="download-icon">🍎</div>
             <h3>macOS App</h3>
             <p>La experiencia definitiva. Interfaz gráfica con panel de control para todos tus proyectos.</p>
-            <a href="#" class="btn btn-primary btn-lg">Descargar para Mac (.dmg)</a>
+              <a href="https://github.com/sistematlan/damp/releases" target="_blank" class="btn btn-primary btn-lg">Ver releases de macOS</a>
             <span class="download-note d-block mt-2">macOS 12+ &middot; Apple Silicon & Intel</span>
           </div>
           <div class="download-card">
@@ -295,7 +479,7 @@
         </div>
         <div class="footer-links">
           <a href="https://github.com/sistematlan/damp" target="_blank">GitHub</a>
-          <a href="https://github.com/sistematlan/damp/blob/main/MANUAL.md" target="_blank">Documentación</a>
+            <a href="https://github.com/sistematlan/damp/blob/main/README.md" target="_blank">Documentación</a>
           <a href="https://github.com/sistematlan/damp/issues" target="_blank">Reportar bug</a>
           <a href="https://buymeacoffee.com/sistematlan" target="_blank" class="sponsor-link">☕ Invítanos un café</a>
         </div>
