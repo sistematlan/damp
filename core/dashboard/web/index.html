@@ -10,29 +10,32 @@
 <body>
   <div class="app">
     <nav class="sidebar">
-      <div class="sidebar-brand"><img src="/favicon.png" alt="DAMP" style="width:20px;height:20px;vertical-align:middle;margin-right:8px;">DAMP</div>
+      <div class="sidebar-brand">
+        <img src="/favicon.png" alt="DAMP" style="width:28px;height:28px;margin-right:10px;border-radius:6px;">
+        DAMP
+      </div>
       <a href="#/" class="nav-item active" data-view="overview">
-        <span class="nav-icon">&#9673;</span> Overview
+        <span class="nav-icon">◉</span> Overview
       </a>
       <a href="#/projects" class="nav-item" data-view="projects">
-        <span class="nav-icon">&#9881;</span> Projects
+        <span class="nav-icon">⚙</span> Projects
       </a>
       <a href="#/databases" class="nav-item" data-view="databases">
-        <span class="nav-icon">&#9707;</span> Databases
+        <span class="nav-icon">☰</span> Databases
       </a>
       <a href="#/logs" class="nav-item" data-view="logs">
-        <span class="nav-icon">&#9783;</span> Logs
+        <span class="nav-icon">☷</span> Logs
       </a>
       <div class="sidebar-footer">
         <div class="sidebar-links">
-          <a href="https://pma.local" target="_blank" class="sidebar-link">PHPMyAdmin</a>
-          <a href="https://mail.local" target="_blank" class="sidebar-link">Mailpit</a>
+          <a href="https://pma.test" target="_blank" class="sidebar-link">PHPMyAdmin</a>
+          <a href="https://mail.test" target="_blank" class="sidebar-link">Mailpit</a>
         </div>
         <div class="lang-toggle">
           <button class="lang-btn active" data-lang="en" onclick="setLang('en')">EN</button>
           <button class="lang-btn" data-lang="es" onclick="setLang('es')">ES</button>
         </div>
-        <div class="sidebar-version">DAMP v0.2.0</div>
+        <div class="sidebar-version">DAMP v2.0.0</div>
       </div>
     </nav>
 

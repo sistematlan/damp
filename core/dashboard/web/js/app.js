@@ -62,30 +62,26 @@ function updateStatusBar() {
 // ── Shared render helpers ──────────────────────────────
 function renderContainerRows(list) {
   if (!list || list.length === 0) {
-    return '<div class="empty"><div class="empty-icon">&#9898;</div>No containers</div>';
+    return '<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No containers</div></div>';
   }
-  return list.map(c => `
-    <div class="container-row fade-in">
-      <div class="container-info">
-        <span class="dot ${c.state}"></span>
-        <span class="container-name">${c.name}</span>
-        ${c.is_damp ? '<span class="badge badge-damp">DAMP</span>' : ''}
-        <span class="badge badge-${c.state}">${c.state}</span>
-      </div>
-      <div class="container-actions">
-        ${c.state === 'running'
-          ? `<button class="btn-icon danger" onclick="containerAction('${c.name}','stop')" title="Stop">&#9632;</button>
-             <button class="btn-icon" onclick="containerAction('${c.name}','restart')" title="Restart">&#8635;</button>`
-          : `<button class="btn-icon" onclick="containerAction('${c.name}','start')" title="Start">&#9654;</button>`
-        }
-      </div>
-    </div>
-  `).join('');
+  return list.map(function(c, i) {
+    return '<div class="container-row fade-in stagger-' + (i + 1) + '" data-container="' + c.name + '" onclick="containerAction(\'' + c.name + '\', \'' + (c.state === 'running' ? 'stop' : 'start') + '\')">' +
+      '<div class="container-info">' +
+        '<span class="dot ' + c.state + '" data-status="' + c.state + '"></span>' +
+        '<div>' +
+          '<div class="container-name">' + c.name + '</div>' +
+          '<div class="container-meta">' + (c.state === 'running' ? '● Activo' : '○ Detenido') + '</div>' +
+        '</div>' +
+        (c.is_damp ? '<span class="badge badge-damp">DAMP</span>' : '') +
+      '</div>' +
+      '<span class="badge badge-' + c.state + '">' + c.state + '</span>' +
+    '</div>';
+  }).join('');
 }
 
 async function containerAction(name, action) {
   try {
-    await fetch(`/api/containers/${name}/${action}`, { method: 'POST' });
+    await fetch('/api/containers/' + name + '/' + action, { method: 'POST' });
   } catch (e) {
     console.error(e);
   }

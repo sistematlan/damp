@@ -342,20 +342,24 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 			}
 		}
 
-		// Start containers — use --project-directory so Docker daemon
+		// Start containers in background — use --project-directory so Docker daemon
 		// resolves volume mounts relative to the host path
-		composeCmd := exec.Command("docker", "compose",
-			"--project-directory", projectPath,
-			"up", "-d", "--build")
-		composeCmd.Dir = projectPath
-		composeOut, err := composeCmd.CombinedOutput()
-		if err != nil {
-			status = "error"
-			output = fmt.Sprintf("Config created but failed to start: %s", string(composeOut))
-		} else {
-			status = "running"
-			output = fmt.Sprintf("Project '%s' is running at https://%s", name, domain)
-		}
+		// This runs asynchronously to avoid blocking the HTTP response
+		go func() {
+			composeCmd := exec.Command("docker", "compose",
+				"--project-directory", projectPath,
+				"up", "-d", "--build")
+			composeCmd.Dir = projectPath
+			composeOut, err := composeCmd.CombinedOutput()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Project %s failed to start: %s\nOutput: %s\n", name, err, string(composeOut))
+			} else {
+				fmt.Fprintf(os.Stderr, "Project %s started successfully\n", name)
+			}
+		}()
+		
+		status = "starting"
+		output = fmt.Sprintf("Project '%s' is starting. Containers will be ready in a moment at https://%s", name, domain)
 	}
 
 	c.RegisterProject(name, projectPath)

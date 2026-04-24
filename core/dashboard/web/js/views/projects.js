@@ -200,18 +200,34 @@ async function adoptProject() {
   var path = pathInput.value.trim();
 
   if (!name) { nameInput.focus(); return; }
+  if (!path) { 
+    statusEl.style.display = 'block';
+    statusEl.innerHTML = '<div style="color:var(--red);padding:8px 0;">Please select a folder first</div>';
+    return; 
+  }
 
   btn.disabled = true;
   btn.textContent = t('adding');
   statusEl.style.display = 'block';
-  statusEl.innerHTML = '<div class="loading" style="color:var(--text-muted);padding:8px 0;">' + t('creatingDbCaddy') + '</div>';
+  statusEl.innerHTML = 
+    '<div style="color:var(--text-muted);padding:8px 0;">' +
+      '<div class="loading" style="display:inline-block;margin-right:8px;"></div>' +
+      'Creating project configuration...' +
+    '</div>';
 
   try {
-    var result = await api('/api/projects', {
+    // Set a longer timeout for the fetch (5 minutes)
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() {
+      controller.abort();
+    }, 300000); // 5 minutes
+
+    var result = await fetch('/api/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: name, template: templateSelect.value, path: path }),
-    });
+      signal: controller.signal
+    }).then(function(res) { clearTimeout(timeoutId); return res.json(); });
 
     if (result.error) {
       statusEl.innerHTML = '<div style="color:var(--red);padding:8px 0;">' + t('error') + ': ' + result.error + '</div>';
@@ -219,9 +235,9 @@ async function adoptProject() {
       var color = result.status === 'running' ? 'var(--green)' : result.status === 'error' ? 'var(--red)' : 'var(--yellow)';
       statusEl.innerHTML =
         '<div style="color:' + color + ';padding:8px 0;">' +
-          '&#10003; <strong>' + result.name + '</strong> &mdash; ' +
+          '✓ <strong>' + result.name + '</strong> — ' +
           '<a href="https://' + result.domain + '" target="_blank" style="color:var(--green);">' + result.domain + '</a>' +
-          ' &middot; DB: <code>' + result.database + '</code>' +
+          ' · DB: <code>' + result.database + '</code>' +
           '<br><span style="color:var(--text-muted);font-size:12px;">' + result.output + '</span>' +
         '</div>';
       nameInput.value = '';
@@ -229,7 +245,11 @@ async function adoptProject() {
       refreshProjectList();
     }
   } catch (e) {
-    statusEl.innerHTML = '<div style="color:var(--red);padding:8px 0;">' + t('failedAdopt') + '</div>';
+    if (e.name === 'AbortError') {
+      statusEl.innerHTML = '<div style="color:var(--yellow);padding:8px 0;">Request timed out. The project may still be processing in the background.</div>';
+    } else {
+      statusEl.innerHTML = '<div style="color:var(--red);padding:8px 0;">' + t('failedAdopt') + ': ' + e.message + '</div>';
+    }
   }
 
   btn.disabled = false;

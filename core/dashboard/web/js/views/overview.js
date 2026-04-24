@@ -2,14 +2,14 @@
 
 function getServiceInfo(containers) {
   var serviceMap = {
-    'damp-caddy':      { label: 'Caddy',       icon: '&#9741;',  desc: 'reverseProxy',   url: '' },
-    'damp-db':         { label: 'MySQL 8.4',    icon: '&#9707;',  desc: 'databases',      url: '', port: '3306' },
-    'damp-postgres':   { label: 'PostgreSQL 16', icon: '&#9707;', desc: 'databases',      url: '', port: '5432' },
-    'damp-redis':      { label: 'Redis 7',      icon: '&#9672;',  desc: 'cache',          url: '', port: '6379' },
-    'damp-phpmyadmin': { label: 'PHPMyAdmin',   icon: '&#128451;', desc: 'dbManagement',  url: 'https://pma.local' },
-    'damp-mailpit':    { label: 'Mailpit',      icon: '&#128236;', desc: 'emailTesting',  url: 'https://mail.local' },
-    'damp-dashboard':  { label: 'Dashboard',    icon: '&#9673;',  desc: 'DAMP',           url: 'https://damp.local' },
-    'damp-dns':        { label: 'DNS',          icon: '&#127760;', desc: 'dns',           url: '' },
+    'damp-caddy':      { label: 'Caddy',       icon: '🔗',  desc: 'reverseProxy',   url: '' },
+    'damp-db':         { label: 'MySQL 8.4',    icon: '🗄️',  desc: 'databases',      url: '', port: '3306' },
+    'damp-postgres':   { label: 'PostgreSQL 16', icon: '🗄️', desc: 'databases',      url: '', port: '5432' },
+    'damp-redis':      { label: 'Redis 7',      icon: '⚡',  desc: 'cache',          url: '', port: '6379' },
+    'damp-phpmyadmin': { label: 'PHPMyAdmin',   icon: '📊', desc: 'dbManagement',  url: 'https://pma.test' },
+    'damp-mailpit':    { label: 'Mailpit',      icon: '📧', desc: 'emailTesting',  url: 'https://mail.test' },
+    'damp-dashboard':  { label: 'Dashboard',    icon: '◉',  desc: 'DAMP',           url: 'https://damp.test' },
+    'damp-dns':        { label: 'DNS',          icon: '🌐', desc: 'dns',           url: '' },
   };
 
   var result = [];
@@ -34,19 +34,19 @@ function getServiceInfo(containers) {
 }
 
 function renderServiceGrid(services) {
-  return services.map(function(s) {
+  return services.map(function(s, i) {
     var linkStart = s.url ? '<a href="' + s.url + '" target="_blank" style="text-decoration:none;color:inherit;">' : '';
     var linkEnd = s.url ? '</a>' : '';
     return linkStart +
-      '<div class="service-card">' +
+      '<div class="service-card fade-in stagger-' + (i + 1) + '" data-service="' + s.name + '">' +
         '<div class="service-header">' +
           '<span class="service-icon">' + s.icon + '</span>' +
           '<span class="dot ' + s.state + '" style="margin-left:auto;"></span>' +
         '</div>' +
         '<div class="service-name">' + s.label + '</div>' +
         '<div class="service-desc">' + s.desc +
-          (s.port ? ' &middot; :' + s.port : '') +
-          (s.url ? ' &#8594;' : '') +
+          (s.port ? ' · :' + s.port : '') +
+          (s.url ? ' →' : '') +
         '</div>' +
       '</div>' + linkEnd;
   }).join('');
@@ -66,15 +66,15 @@ async function renderOverview(el) {
 
     el.innerHTML =
       '<div class="grid-3 fade-in" style="margin-bottom: 24px;">' +
-        '<div class="card stat">' +
+        '<div class="stat">' +
           '<div class="stat-value">' + running + '</div>' +
           '<div class="stat-label">' + t('containersRunning') + '</div>' +
         '</div>' +
-        '<div class="card stat">' +
+        '<div class="stat">' +
           '<div class="stat-value">' + projects.length + '</div>' +
           '<div class="stat-label">' + t('projects') + '</div>' +
         '</div>' +
-        '<div class="card stat">' +
+        '<div class="stat">' +
           '<div class="stat-value">' + dbs.length + '</div>' +
           '<div class="stat-label">' + t('databases') + '</div>' +
         '</div>' +
@@ -84,8 +84,8 @@ async function renderOverview(el) {
         '<div class="card-header">' +
           '<span class="card-title">' + t('services') + '</span>' +
           '<div class="container-actions">' +
-            '<button class="btn btn-sm btn-primary" id="btn-engine-up" onclick="engineAction(\'up\')">&#9654; ' + t('start') + '</button>' +
-            '<button class="btn btn-sm btn-danger" id="btn-engine-down" onclick="engineAction(\'down\')">&#9632; ' + t('stop') + '</button>' +
+            '<button class="btn btn-sm btn-primary" id="btn-engine-up" onclick="engineAction(\'up\')">▶ ' + t('start') + '</button>' +
+            '<button class="btn btn-sm btn-danger" id="btn-engine-down" onclick="engineAction(\'down\')">■ ' + t('stop') + '</button>' +
           '</div>' +
         '</div>' +
         '<div class="service-grid">' +
@@ -97,6 +97,7 @@ async function renderOverview(el) {
         '<div class="card fade-in">' +
           '<div class="card-header">' +
             '<span class="card-title">' + t('projects') + '</span>' +
+            '<span class="card-count">' + projects.length + '</span>' +
           '</div>' +
           '<div id="container-list">' + renderContainerRows(projects) + '</div>' +
         '</div>' +
@@ -104,16 +105,17 @@ async function renderOverview(el) {
         '<div class="card fade-in">' +
           '<div class="card-header">' +
             '<span class="card-title">' + t('databases') + '</span>' +
+            '<span class="card-count">' + dbs.length + '</span>' +
           '</div>' +
-          '<div style="display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0;">' +
+          '<div class="db-grid" style="padding: 4px 0;">' +
             dbs.map(function(db) {
-              return '<span class="badge" style="background: var(--surface-alt); color: var(--text); font-family: SF Mono, monospace; padding: 4px 10px;">' + db + '</span>';
+              return '<div class="db-card"><span>' + db + '</span></div>';
             }).join('') +
           '</div>' +
         '</div>' +
       '</div>';
   } catch (e) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">&#9888;</div>' + t('cannotConnect') + '</div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">' + t('cannotConnect') + '</div></div>';
   }
 }
 

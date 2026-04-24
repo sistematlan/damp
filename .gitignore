@@ -37,3 +37,8 @@ core/dashboard/dashboard
 *.sql.gz
 backups/
 data/
+
+# Compiled binaries
+core/dashboard/damp-dashboard
+core/dashboard/damp-dashboard-linux
+
