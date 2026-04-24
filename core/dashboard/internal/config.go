@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var validName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
@@ -471,7 +472,9 @@ func (c *ConfigClient) ListProjectsFromCaddy(dc *DockerClient) ([]ProjectStatus,
 
 // ── Delete project ───────────────────────────────────────
 
-func (c *ConfigClient) DeleteProject(name string, dc *DockerClient, dbClient *DatabaseClient) error {
+func (c *ConfigClient) DeleteProject(name string, dc *DockerClient, dbClient *DatabaseClient) (string, error) {
+	dumpPath := ""
+	
 	// 1. Stop containers
 	if dc != nil {
 		ctx := context.Background()
@@ -482,19 +485,45 @@ func (c *ConfigClient) DeleteProject(name string, dc *DockerClient, dbClient *Da
 	caddyPath := filepath.Join(c.dampDir, "caddy", "projects.d", name+".caddy")
 	os.Remove(caddyPath)
 
-	// 3. Drop database (best effort)
+	// 3. Backup database before dropping
 	dbName := strings.ReplaceAll(name, "-", "_") + "_db"
+	projectPath := c.GetProjectPath(name)
+	
+	if dbClient != nil && projectPath != "" {
+		// Check if database exists and has data
+		dbs, _ := dbClient.ListDatabases()
+		dbExists := false
+		for _, db := range dbs {
+			if db == dbName {
+				dbExists = true
+				break
+			}
+		}
+		
+		if dbExists {
+			timestamp := time.Now().Format("20060102_150405")
+			dumpFileName := fmt.Sprintf("%s_db_dump_%s.sql", name, timestamp)
+			dumpPath = filepath.Join(projectPath, dumpFileName)
+			
+			if err := dbClient.DumpDatabase(dbName, dumpPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to dump database %s: %v\n", dbName, err)
+				dumpPath = "" // Don't report path if dump failed
+			}
+		}
+	}
+
+	// 4. Drop database (best effort)
 	if dbClient != nil {
 		dbClient.DropDatabase(dbName)
 	}
 
-	// 4. Unregister
+	// 5. Unregister
 	c.UnregisterProject(name)
 
-	// 5. Reload Caddy via admin API
+	// 6. Reload Caddy via admin API
 	reloadCaddy() // best-effort: project config file is already deleted
 
-	return nil
+	return dumpPath, nil
 }
 
 func HandleDeleteProject(w http.ResponseWriter, r *http.Request, cc *ConfigClient, dc *DockerClient, dbClient *DatabaseClient) {
@@ -510,11 +539,21 @@ func HandleDeleteProject(w http.ResponseWriter, r *http.Request, cc *ConfigClien
 		return
 	}
 
-	if err := cc.DeleteProject(name, dc, dbClient); err != nil {
+	dumpPath, err := cc.DeleteProject(name, dc, dbClient)
+	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	jsonResponse(w, map[string]string{"status": "deleted", "name": name})
+	
+	response := map[string]string{
+		"status": "deleted", 
+		"name": name,
+	}
+	if dumpPath != "" {
+		response["dump"] = dumpPath
+	}
+	
+	jsonResponse(w, response)
 }
 
 // ── Browse host filesystem ───────────────────────────────

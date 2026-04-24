@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -105,6 +107,39 @@ func (d *DatabaseClient) DropDatabase(name string) error {
 
 	_, err = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", name))
 	return err
+}
+
+func (d *DatabaseClient) DumpDatabase(name string, outputPath string) error {
+	// Extract credentials from DSN
+	// DSN format: root:password@tcp(host:3306)/
+	parts := strings.Split(d.dsn, "@")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid DSN format")
+	}
+	credParts := strings.Split(parts[0], ":")
+	if len(credParts) != 2 {
+		return fmt.Errorf("invalid credentials in DSN")
+	}
+	password := credParts[1]
+
+	// Use docker exec to run mysqldump inside the MySQL container
+	cmd := exec.Command("docker", "exec", "damp-db", "mysqldump", 
+		"-uroot", "-p"+password, 
+		"--single-transaction", 
+		"--routines", 
+		"--triggers",
+		name)
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("mysqldump failed: %w\nOutput: %s", err, string(output))
+	}
+
+	if err := os.WriteFile(outputPath, output, 0644); err != nil {
+		return fmt.Errorf("failed to write dump file: %w", err)
+	}
+
+	return nil
 }
 
 // ── PostgreSQL (via TCP) ──────────────────────────────────

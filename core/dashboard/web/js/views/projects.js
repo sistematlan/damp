@@ -406,13 +406,30 @@ async function selectCurrentFolder() {
 }
 
 async function deleteProject(name) {
-  if (!confirm('Delete project "' + name + '"?\nThis will stop containers, remove Caddy config and drop the database.')) return;
+  var message = 'Delete project "' + name + '"?\n\n' +
+    'This will:\n' +
+    '• Stop containers\n' +
+    '• Remove domain configuration\n' +
+    '• Create database backup (dump)\n' +
+    '• Drop the database\n\n' +
+    'Your project files will NOT be deleted.';
+  
+  if (!confirm(message)) return;
 
   try {
-    await fetch('/api/projects/' + name, { method: 'DELETE' });
-    setTimeout(refreshProjectList, 1000);
+    var response = await fetch('/api/projects/' + name, { method: 'DELETE' });
+    var result = await response.json();
+    
+    if (result.dump) {
+      alert('Project "' + name + '" deleted.\n\nDatabase backup saved to:\n' + result.dump);
+    } else {
+      alert('Project "' + name + '" deleted.\n\nNote: Database backup could not be created.');
+    }
+    
+    setTimeout(refreshProjectList, 500);
   } catch (e) {
     console.error(e);
+    alert('Error deleting project: ' + e.message);
   }
 }
 
