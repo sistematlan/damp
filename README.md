@@ -56,6 +56,32 @@ The installer will:
 
 After installation, open https://damp.test in your browser.
 
+### Fastest onboarding (3 minutes)
+
+```bash
+git clone https://github.com/sistematlan/damp.git
+cd damp
+./install.sh
+```
+
+1. Install and open `https://damp.test`.
+2. If certificates are not yet trusted, run:
+   ```bash
+   damp trust
+   ```
+3. Create your first project:
+   ```bash
+   damp new frankenphp my-project
+   ```
+4. Open `https://my-project.test` in your browser.
+
+For existing projects, initialize and adopt them in place:
+
+```bash
+cd ~/projects/my-existing-app
+damp init
+```
+
 ---
 
 ## Working with projects
@@ -127,6 +153,23 @@ Open https://damp.test → **Projects**:
 
 Each project has **play/stop/restart/delete** controls in the dashboard.
 
+### Safe delete and backups
+
+Project deletion is destructive only for DAMP-managed services, not your source files. When you delete a project, DAMP:
+
+- Stops and removes project containers
+- Removes generated reverse-proxy config
+- Removes the project database
+- Automatically creates a database dump if a DB exists
+
+The DB dump is stored in the project root with a timestamped filename:
+
+```bash
+<project-name>_db_dump_YYYYMMDD_HHMMSS.sql
+```
+
+This gives you a recoverable backup before cleanup.
+
 ---
 
 ## Templates
@@ -154,7 +197,7 @@ damp update            # Pull latest version and rebuild
 
 # Projects (Dampfile workflow)
 damp init              # Init existing project interactively (run from project dir)
-damp exec [command]    # Execute command inside project container (e.g., damp exec spark migrate)
+damp exec my-project    # Open shell in one of the project containers
 
 # Projects (legacy template workflow)
 damp new my-project              # Create project (interactive)
@@ -162,7 +205,7 @@ damp new frankenphp my-project   # Create with specific template
 damp start my-project            # Start a project's containers
 damp stop my-project             # Stop a project's containers
 damp list                        # List all registered projects
-damp exec my-project             # Shell into project container
+damp exec my-project             # Open shell in a project's container
 
 # Database
 damp databases         # List databases
@@ -177,6 +220,15 @@ damp setup-dns         # Install/configure dnsmasq for wildcard *.test DNS (requ
 damp reload            # Reload Caddy after manual config changes
 damp add-host domain   # Add a single domain to /etc/hosts (fallback)
 ```
+
+### Command flow reference
+
+- Engine: `damp up`, `damp down`, `damp restart`, `damp status`
+- Projects: `damp new [template] [name]`, `damp init`, `damp start|stop <name>`, `damp list`, `damp exec <name>`
+- Databases: `damp databases`, `damp create-db`, `damp drop-db`, `damp export`, `damp import`
+- Networking/security: `damp setup-dns`, `damp trust`, `damp reload`, `damp add-host domain`
+
+> If you are getting `502` right after creating/importing a project, wait 20-30 seconds and retry. The container may still be starting.
 
 ---
 
