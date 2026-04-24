@@ -62,7 +62,51 @@ After installation, open https://damp.test in your browser.
 
 DAMP gives you two ways to set up projects: **CLI** and **Dashboard**. Both create a database, generate HTTPS config, and start containers. DNS resolution is handled automatically by the dnsmasq service installed during setup.
 
-### New project from scratch
+### The Dampfile (recommended)
+
+DAMP v2.0 introduces the **Dampfile** — a single YAML file that replaces manual Docker configuration:
+
+```yaml
+# Dampfile v1.0
+version: "1.0"
+
+project:
+  name: my-project
+  domain: my-project.test
+  type: php-fpm  # php-fpm, frankenphp, node, static
+
+runtime:
+  php_version: "8.4"
+  document_root: public
+
+database:
+  name: my_project_db
+  create: true
+```
+
+Place a `Dampfile` in your project root and DAMP handles the rest:
+- Generates `docker-compose.yml` automatically
+- No Dockerfile needed
+- No manual Caddy configuration
+- No template files to copy
+
+### Existing project (import)
+
+```bash
+cd ~/projects/my-existing-app
+damp init
+```
+
+`damp init` works interactively from inside your project directory:
+1. **Suggests** project name from folder name
+2. **Detects** project type (CI4, Laravel, Symfony, Node, WordPress, etc.)
+3. **Finds** document root (auto-discovers `index.php`)
+4. **Suggests** database name
+5. **Generates** `Dampfile` and `docker-compose.yml`
+6. **Creates** the database
+7. **Starts** the containers
+
+### New project from scratch (legacy templates)
 
 ```bash
 # Interactive — detects or asks for template
@@ -72,23 +116,7 @@ damp new my-project
 damp new frankenphp my-project
 ```
 
-This creates a new directory `my-project/` with the template files, a database (`my_project_db`), and starts it at `https://my-project.test`.
-
-### Existing project (import)
-
-```bash
-cd ~/projects/my-existing-app
-damp init my-app
-```
-
-`damp init` works from inside your project directory:
-1. **Detects** the project type (CI4, Laravel, Symfony, Node, WordPress, etc.)
-2. **Copies** the template files (`docker-compose.yml`, `Dockerfile`, `Caddyfile`) — backs up any existing files as `.bak`
-3. **Creates** a database (`my_app_db`)
-4. **Adds** a Caddy config for `my-app.test`
-5. **Starts** the containers
-
-If you omit the name, it uses the folder name: `damp init` in `~/projects/my-app/` → `my-app.test`.
+This creates a new directory with template files (legacy method — Dampfile preferred).
 
 ### From the Dashboard
 
@@ -124,10 +152,13 @@ damp restart           # Restart DAMP
 damp status            # Show service status
 damp update            # Pull latest version and rebuild
 
-# Projects
+# Projects (Dampfile workflow)
+damp init              # Init existing project interactively (run from project dir)
+damp exec [command]    # Execute command inside project container (e.g., damp exec spark migrate)
+
+# Projects (legacy template workflow)
 damp new my-project              # Create project (interactive)
 damp new frankenphp my-project   # Create with specific template
-damp init [name]                 # Init existing project (run from project dir)
 damp start my-project            # Start a project's containers
 damp stop my-project             # Stop a project's containers
 damp list                        # List all registered projects
@@ -250,13 +281,24 @@ All emails are captured at https://mail.test — nothing is sent externally.
 
 ## Dashboard
 
-The web dashboard at https://damp.test provides:
+The web dashboard at https://damp.test provides a premium dark UI with:
 
-- **Overview** — Service status, ports, quick access links, engine start/stop
-- **Projects** — Create, import, start/stop/restart/delete projects with a folder browser
+- **Overview** — Service status, animated stats cards, quick access links, engine controls
+- **Projects** — Tabbed view with project cards showing type, domain, database, and live status
+- **Project Import** — Async folder browser with auto-template detection. No hanging — containers start in background
 - **Databases** — MySQL and PostgreSQL management (create/drop), Redis status
 - **Logs** — Real-time container log streaming
+- **Animations** — Staggered entrance animations, hover effects, glow indicators
 - **Bilingual** — English and Spanish (toggle in sidebar)
+
+## Migrating from templates to Dampfile
+
+If you have existing projects created with the legacy template system (pre-v0.4.0), you can migrate them:
+
+1. Delete old template files: `rm Dockerfile docker-compose.yml Caddyfile *.bak`
+2. Run `damp init` from your project directory
+3. The interactive wizard will detect your setup and generate a `Dampfile`
+4. Commit the `Dampfile` to your repo — it's all you need
 
 ## Updating
 

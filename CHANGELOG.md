@@ -10,6 +10,35 @@ at `1.0.0`, breaking changes will be reserved for major bumps.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-04-24
+
+### Added
+- **Dampfile**: declarative YAML configuration standard for projects. Replaces manual Dockerfile/docker-compose.yml setup with a single `Dampfile` per project.
+- **`damp init` interactive mode**: auto-detects project type (CI4, Laravel, Node, etc.), PHP version from composer.json, document root, and suggests database name.
+- **`damp exec` command**: execute CLI commands inside project containers (spark, artisan, composer) without host PHP installation.
+- **`damp-compose` wrapper**: context-aware docker-compose that reads Dampfile configuration.
+- Dashboard: premium dark UI redesign with animations, glow effects, and micro-interactions.
+- Dashboard: tabbed navigation (Services / Projects).
+- Dashboard: project cards with icons, metadata, and status indicators.
+- Dashboard: async project import with background container startup (no more hanging).
+- Dashboard: stagger animations and hover effects throughout.
+
+### Changed
+- **Project import flow**: now generates `Dampfile` instead of copying template files. No more `.bak` files or manual Dockerfile edits.
+- Dashboard: updated to `.test` TLD across all service links.
+- Dashboard: service grid now uses `grid-template-columns: repeat(auto-fill, ...)` for responsive layout.
+- Backend: Docker compose up runs asynchronously to prevent HTTP timeouts during project creation.
+
+### Fixed
+- Dashboard JavaScript syntax error in `engineAction()` calls.
+- Missing axolotl mascot icon in sidebar.
+- Project creation timeout — containers now start in background goroutine.
+
+### Deprecated
+- Template-based project creation (legacy `damp new <template> <name>` still works but Dampfile is preferred).
+
+## [0.3.1] — 2026-04-24
+
 ### Added
 - `setup-dns.sh`: comprehensive host-native DNS installer for macOS
   (Homebrew), Linux (apt/dnf/pacman), and WSL2. Installs dnsmasq,
@@ -153,7 +182,8 @@ Initial internal release.
   `create-db`, `drop-db`, `import`, `export`, `new`, `exec`, `trust`,
   `reload`, `add-host`.
 
-[Unreleased]: https://github.com/sistematlan/damp/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/sistematlan/damp/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/sistematlan/damp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/sistematlan/damp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sistematlan/damp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sistematlan/damp/releases/tag/v0.1.0
