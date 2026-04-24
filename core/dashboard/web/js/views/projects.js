@@ -53,6 +53,8 @@ async function renderProjects(el) {
             '</select>' +
             '<button class="btn btn-primary" id="btn-adopt-project" onclick="adoptProject()">' + t('create') + '</button>' +
           '</div>' +
+          '<div id="adopt-preview" style="display:none; margin-bottom: 12px; padding: 12px; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border);">' +
+          '</div>' +
           '<div id="adopt-project-status" style="display:none;"></div>' +
         '</div>' +
 
@@ -84,6 +86,8 @@ async function renderProjects(el) {
     document.getElementById('project-name').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') createProject();
     });
+    document.getElementById('adopt-name').addEventListener('input', updateAdoptPreview);
+    document.getElementById('adopt-template').addEventListener('change', updateAdoptPreview);
     document.getElementById('adopt-name').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') adoptProject();
     });
@@ -146,6 +150,39 @@ function selectTemplate(name) {
   var select = document.getElementById('project-template');
   if (select) select.value = name;
   document.getElementById('project-name').focus();
+}
+
+function updateAdoptPreview() {
+  var nameInput = document.getElementById('adopt-name');
+  var templateSelect = document.getElementById('adopt-template');
+  var previewEl = document.getElementById('adopt-preview');
+  
+  var name = nameInput.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  var template = templateSelect ? templateSelect.value : 'php-fpm';
+  
+  if (!name) {
+    previewEl.style.display = 'none';
+    return;
+  }
+  
+  var dbName = name.replace(/-/g, '_') + '_db';
+  var domain = name + '.test';
+  var webContainer = name + '-web';
+  var appContainer = name + '-app';
+  
+  var isPhpFpm = template === 'php-fpm' || template === 'php-legacy' || template === 'php-ancient';
+  var webServer = isPhpFpm ? webContainer + ':80 (Nginx)' : appContainer + ':80';
+  
+  previewEl.innerHTML = 
+    '<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px;">Project Preview</div>' +
+    '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">' +
+      '<div><span style="color: var(--text-muted);">Domain:</span> <code style="color: var(--accent);">' + domain + '</code></div>' +
+      '<div><span style="color: var(--text-muted);">Database:</span> <code style="color: var(--accent);">' + dbName + '</code></div>' +
+      '<div><span style="color: var(--text-muted);">App:</span> <code>' + appContainer + '</code></div>' +
+      (isPhpFpm ? '<div><span style="color: var(--text-muted);">Web:</span> <code>' + webContainer + '</code></div>' : '') +
+      '<div style="grid-column: 1 / -1;"><span style="color: var(--text-muted);">Proxy Target:</span> <code style="color: var(--green);">' + webServer + '</code></div>' +
+    '</div>';
+  previewEl.style.display = 'block';
 }
 
 async function createProject() {
@@ -233,15 +270,27 @@ async function adoptProject() {
       statusEl.innerHTML = '<div style="color:var(--red);padding:8px 0;">' + t('error') + ': ' + result.error + '</div>';
     } else {
       var color = result.status === 'running' ? 'var(--green)' : result.status === 'error' ? 'var(--red)' : 'var(--yellow)';
+      var nextSteps = '';
+      if (result.status === 'starting') {
+        nextSteps = '<div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border);">' +
+          '<div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Next Steps</div>' +
+          '<ol style="margin:0;padding-left:16px;font-size:12px;color:var(--text-secondary);line-height:1.8;">' +
+            '<li>Wait 30 seconds for containers to start</li>' +
+            '<li>Click <strong>' + result.domain + '</strong> to open your project</li>' +
+            '<li>If it shows 502, wait a bit more and refresh</li>' +
+          '</ol>' +
+        '</div>';
+      }
       statusEl.innerHTML =
         '<div style="color:' + color + ';padding:8px 0;">' +
           '✓ <strong>' + result.name + '</strong> — ' +
           '<a href="https://' + result.domain + '" target="_blank" style="color:var(--green);">' + result.domain + '</a>' +
           ' · DB: <code>' + result.database + '</code>' +
           '<br><span style="color:var(--text-muted);font-size:12px;">' + result.output + '</span>' +
-        '</div>';
+        '</div>' + nextSteps;
       nameInput.value = '';
       pathInput.value = '';
+      document.getElementById('adopt-preview').style.display = 'none';
       refreshProjectList();
     }
   } catch (e) {

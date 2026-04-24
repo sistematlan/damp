@@ -287,7 +287,16 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 	caddyDir := filepath.Join(c.dampDir, "caddy", "projects.d")
 	os.MkdirAll(caddyDir, 0755)
 	domain := name + "." + dampTLD()
-	caddyConfig := fmt.Sprintf("%s {\n    reverse_proxy %s-app:80\n}\n", domain, name)
+	
+	// Determine target container based on template
+	// frankenphp, wordpress, node, static use 'app' service
+	// php-fpm, php-legacy, php-ancient use 'web' service (nginx)
+	targetContainer := name + "-app:80"
+	if template == "php-fpm" || template == "php-legacy" || template == "php-ancient" {
+		targetContainer = name + "-web:80"
+	}
+	
+	caddyConfig := fmt.Sprintf("%s {\n    reverse_proxy %s\n}\n", domain, targetContainer)
 	caddyPath := filepath.Join(caddyDir, name+".caddy")
 	if err := os.WriteFile(caddyPath, []byte(caddyConfig), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write Caddy config: %w", err)
@@ -359,7 +368,7 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 		}()
 		
 		status = "starting"
-		output = fmt.Sprintf("Project '%s' is starting. Containers will be ready in a moment at https://%s", name, domain)
+		output = fmt.Sprintf("Project '%s' is starting at https://%s. Wait 30 seconds then click the domain link or refresh the page.", name, domain)
 	}
 
 	c.RegisterProject(name, projectPath)
