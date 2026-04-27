@@ -857,7 +857,6 @@ case "${1:-help}" in
     echo ""
 
     # 1. Project name
-    local default_name
     default_name=$(basename "$CALLER_DIR" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/-\+/-/g' | sed 's/^-//;s/-$//')
     project=$(read_input "Project name [${default_name}]: " "$default_name")
     project=$(echo "$project" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/-\+/-/g' | sed 's/^-//;s/-$//')
@@ -866,7 +865,6 @@ case "${1:-help}" in
     template=$(detect_template "$target")
     if [ -n "$template" ]; then
       echo -e "${DIM}Detected project type: ${BOLD}${template}${NC}"
-      local confirm_template
       confirm_template=$(read_input "Use this type? [Y/n]: " "Y")
       if [ "$confirm_template" = "n" ] || [ "$confirm_template" = "N" ]; then
         template=""
@@ -884,24 +882,20 @@ case "${1:-help}" in
     php_version=""
     document_root=""
     if [ "$template" = "frankenphp" ] || [ "$template" = "php-fpm" ] || [ "$template" = "php-legacy" ] || [ "$template" = "php-ancient" ]; then
-      local detected_php
       detected_php=$(detect_php_version "$target")
       php_version=$(read_input "PHP version [${detected_php}]: " "$detected_php")
 
-      local detected_root
       detected_root=$(detect_document_root "$target" "$template")
       document_root=$(read_input "Document root [${detected_root}]: " "$detected_root")
     fi
 
     # 4. Database name
-    local default_db
     default_db="${project//-/_}_db"
     dbname=$(read_input "Database name [${default_db}]: " "$default_db")
 
     # 5. Check for existing Dampfile
     if [ -f "$target/Dampfile" ]; then
       echo -e "${YELLOW}A Dampfile already exists in this directory.${NC}"
-      local overwrite_all
       overwrite_all=$(read_input "Overwrite all generated files? [y/N]: " "")
       if [ "$overwrite_all" != "y" ] && [ "$overwrite_all" != "Y" ]; then
         echo "Cancelled."
