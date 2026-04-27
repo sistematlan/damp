@@ -615,6 +615,79 @@ PYEOF
   echo -e "${GREEN}✔ Patched $(basename "$config_file") (backup: $(basename "$config_file").orig)${NC}"
 }
 
+# ── Patch Vite proxy target for Docker network ─────────────────
+patch_vite_proxy() {
+  local dir="$1"
+  local config_file=""
+  for f in "$dir/vite.config.js" "$dir/vite.config.ts" "$dir/vite.config.mjs"; do
+    if [ -f "$f" ]; then
+      config_file="$f"
+      break
+    fi
+  done
+
+  if [ -z "$config_file" ]; then
+    return 0
+  fi
+
+  # Check if proxy block points to a .test/.local/.dev domain
+  if ! grep -qE "target:\s*['\"]https?://[^'\"]+\.(test|local|dev|example)['\"]" "$config_file" 2>/dev/null; then
+    return 0
+  fi
+
+  echo -e "${YELLOW}Vite proxy target uses local domain (e.g., .test).${NC}"
+  echo -e "${DIM}Inside Docker, domains like 'project.test' won't resolve.${NC}"
+  echo -e "${DIM}DAMP can switch proxy targets to container names (e.g., http://project-app:80).${NC}"
+  local confirm_proxy
+  confirm_proxy=$(read_input "Fix proxy targets for Docker network? [Y/n]: " "Y")
+  if [ "$confirm_proxy" != "y" ] && [ "$confirm_proxy" != "Y" ]; then
+    return 0
+  fi
+
+  # Backup if not already backed up
+  if [ ! -f "${config_file}.orig" ]; then
+    cp "$config_file" "${config_file}.orig"
+  fi
+
+  python3 - "$config_file" <<'PYEOF'
+import sys, re
+path = sys.argv[1]
+with open(path, 'r') as f:
+    content = f.read()
+
+# Replace proxy targets pointing to .test/.local/.dev domains
+# https://some-project.test  -> http://some-project-app:80
+# http://api.local           -> http://api-app:80
+
+def replace_target(match):
+    full = match.group(0)
+    quote = match.group(1)
+    url = match.group(2)
+    # Extract project name from domain
+    m = re.match(r'https?://([^/]+)', url)
+    if not m:
+        return full
+    domain = m.group(1)
+    # Remove port if present
+    domain_no_port = domain.split(':')[0]
+    project_name = domain_no_port.split('.')[0]
+    new_url = f'http://{project_name}-app:80'
+    return full.replace(url, new_url)
+
+# Match both single and double quotes
+content = re.sub(
+    r"(target:\s*['\"])(https?://[^'\"]+\.(?:test|local|dev|example)[^'\"]*)['\"]",
+    replace_target,
+    content
+)
+
+with open(path, 'w') as f:
+    f.write(content)
+PYEOF
+
+  echo -e "${GREEN}✔ Fixed proxy targets in $(basename "$config_file")${NC}"
+}
+
 # ── Confirm overwrite (no .bak) ────────────────────────────────
 confirm_overwrite() {
   local filepath="$1"
@@ -1026,6 +1099,7 @@ case "${1:-help}" in
       node_port=$(read_input "Dev server port [${detected_port}]: " "$detected_port")
       node_cmd=$(detect_node_command "$target")
       patch_vite_config "$target"
+      patch_vite_proxy "$target"
     fi
 
     # 4. Database
