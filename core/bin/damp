@@ -554,6 +554,67 @@ http://:80 {
 EOF
 }
 
+# ── Patch vite.config.js for DAMP compatibility ────────────────
+patch_vite_config() {
+  local dir="$1"
+  local config_file=""
+  for f in "$dir/vite.config.js" "$dir/vite.config.ts" "$dir/vite.config.mjs"; do
+    if [ -f "$f" ]; then
+      config_file="$f"
+      break
+    fi
+  done
+
+  if [ -z "$config_file" ]; then
+    return 0
+  fi
+
+  if grep -q "allowedHosts" "$config_file" 2>/dev/null; then
+    return 0
+  fi
+
+  echo -e "${YELLOW}Vite config detected: $(basename "$config_file")${NC}"
+  echo -e "${DIM}DAMP requires host: '0.0.0.0' and allowedHosts: true for reverse-proxy access.${NC}"
+  local confirm_patch
+  confirm_patch=$(read_input "Apply DAMP compatibility patch? [Y/n]: " "Y")
+  if [ "$confirm_patch" != "y" ] && [ "$confirm_patch" != "Y" ]; then
+    return 0
+  fi
+
+  # Backup original
+  cp "$config_file" "${config_file}.orig"
+
+  # Use Python for safe JS config patching
+  python3 - "$config_file" <<'PYEOF'
+import sys, re
+path = sys.argv[1]
+with open(path, 'r') as f:
+    content = f.read()
+
+# Check if server: { exists
+if 'server:' not in content:
+    # Insert server block before last closing brace or at end
+    content = content.rstrip()
+    if content.endswith('}'):
+        content = content[:-1] + "  server: {\n    host: '0.0.0.0',\n    allowedHosts: true,\n  },\n}"
+    else:
+        content += "\nexport const server = {\n  host: '0.0.0.0',\n  allowedHosts: true,\n}\n"
+else:
+    # Patch existing server block
+    # Add host if missing
+    if "host:" not in content:
+        content = re.sub(r'(server:\s*\{)', r"\1\n    host: '0.0.0.0',", content, count=1)
+    # Add allowedHosts if missing
+    if "allowedHosts" not in content:
+        content = re.sub(r'(server:\s*\{)', r"\1\n    allowedHosts: true,", content, count=1)
+
+with open(path, 'w') as f:
+    f.write(content)
+PYEOF
+
+  echo -e "${GREEN}✔ Patched $(basename "$config_file") (backup: $(basename "$config_file").orig)${NC}"
+}
+
 # ── Confirm overwrite (no .bak) ────────────────────────────────
 confirm_overwrite() {
   local filepath="$1"
@@ -964,6 +1025,7 @@ case "${1:-help}" in
       detected_port=$(detect_node_port "$target")
       node_port=$(read_input "Dev server port [${detected_port}]: " "$detected_port")
       node_cmd=$(detect_node_command "$target")
+      patch_vite_config "$target"
     fi
 
     # 4. Database
