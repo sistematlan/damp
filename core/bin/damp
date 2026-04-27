@@ -180,6 +180,7 @@ generate_dampfile() {
   local php_ver="${4:-}"
   local doc_root="${5:-}"
   local dbname="$6"
+  local node_port="${7:-}"
   local domain="${project}.${DAMP_TLD}"
 
   cat > "$target/Dampfile" <<EOF
@@ -201,12 +202,22 @@ runtime:
 EOF
   fi
 
-  cat >> "$target/Dampfile" <<EOF
+  if [ "$ptype" = "node" ] && [ -n "$node_port" ]; then
+    cat >> "$target/Dampfile" <<EOF
+
+runtime:
+  port: ${node_port}
+EOF
+  fi
+
+  if [ -n "$dbname" ]; then
+    cat >> "$target/Dampfile" <<EOF
 
 database:
   name: ${dbname}
   create: true
 EOF
+  fi
 }
 
 # ── Generate docker-compose.yml from Dampfile config ───────────
@@ -215,6 +226,7 @@ generate_docker_compose() {
   local project="$2"
   local ptype="$3"
   local dbname="$4"
+  local node_cmd="${5:-npm install && npm run dev -- --host}"
 
   case "$ptype" in
     frankenphp)
@@ -342,7 +354,7 @@ services:
     working_dir: /app
     volumes:
       - ./:/app
-    command: sh -c "npm install && npm run dev -- --host"
+    command: sh -c "${node_cmd}"
     environment:
       - NODE_ENV=development
     restart: unless-stopped
@@ -558,23 +570,80 @@ confirm_overwrite() {
   return 0
 }
 
+# ── Detect Node.js dev server port from package.json ───────────
+detect_node_port() {
+  local dir="$1"
+  local pkg="$dir/package.json"
+  if [ -f "$pkg" ]; then
+    if grep -q '"vite"' "$pkg" 2>/dev/null; then
+      echo "5173"
+    elif grep -q '"astro"' "$pkg" 2>/dev/null; then
+      echo "4321"
+    elif grep -q '"next"' "$pkg" 2>/dev/null; then
+      echo "3000"
+    elif grep -q '"nuxt"' "$pkg" 2>/dev/null; then
+      echo "3000"
+    elif grep -q '"react-scripts"' "$pkg" 2>/dev/null; then
+      echo "3000"
+    elif grep -q '"@angular/cli"' "$pkg" 2>/dev/null; then
+      echo "4200"
+    elif grep -q '"@sveltejs/kit"' "$pkg" 2>/dev/null; then
+      echo "5173"
+    else
+      echo "5173"
+    fi
+  else
+    echo "5173"
+  fi
+}
+
+# ── Detect Node.js dev command from package.json ───────────────
+detect_node_command() {
+  local dir="$1"
+  local pkg="$dir/package.json"
+  if [ -f "$pkg" ]; then
+    if grep -q '"vite"' "$pkg" 2>/dev/null; then
+      echo 'npm install && npm run dev -- --host'
+    elif grep -q '"astro"' "$pkg" 2>/dev/null; then
+      echo 'npm install && npm run dev -- --host'
+    elif grep -q '"next"' "$pkg" 2>/dev/null; then
+      echo 'npm install && npm run dev'
+    elif grep -q '"nuxt"' "$pkg" 2>/dev/null; then
+      echo 'npm install && npm run dev'
+    elif grep -q '"react-scripts"' "$pkg" 2>/dev/null; then
+      echo 'npm install && npm start'
+    elif grep -q '"@angular/cli"' "$pkg" 2>/dev/null; then
+      echo 'npm install && npm start -- --host 0.0.0.0'
+    elif grep -q '"@sveltejs/kit"' "$pkg" 2>/dev/null; then
+      echo 'npm install && npm run dev -- --host'
+    else
+      echo 'npm install && npm run dev -- --host'
+    fi
+  else
+    echo 'npm install && npm run dev -- --host'
+  fi
+}
+
 # ── Setup project (DB, Caddy, hosts, start) ────────────────────
 setup_project() {
   local project="$1"
   local target="$2"
+  local proxy_port="${3:-80}"
   local domain="${project}.${DAMP_TLD}"
   local dbname="${project//-/_}_db"
 
-  # 1. Create database
-  echo -e "${DIM}Creating database '${dbname}'...${NC}"
-  docker exec damp-db mysql -uroot -p"${DB_ROOT_PASSWORD:-root}" \
-    -e "CREATE DATABASE IF NOT EXISTS \`$dbname\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+  # 1. Create database (skip for projects without DB)
+  if [ -n "$dbname" ]; then
+    echo -e "${DIM}Creating database '${dbname}'...${NC}"
+    docker exec damp-db mysql -uroot -p"${DB_ROOT_PASSWORD:-root}" \
+      -e "CREATE DATABASE IF NOT EXISTS \`$dbname\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+  fi
 
   # 2. Generate Caddy config in projects.d/
   mkdir -p "$PROJECTS_DIR"
   cat > "$PROJECTS_DIR/${project}.caddy" <<EOF
 ${domain} {
-    reverse_proxy ${project}-app:80
+    reverse_proxy ${project}-app:${proxy_port}
 }
 EOF
   echo -e "${DIM}Caddy config created: projects.d/${project}.caddy${NC}"
@@ -600,7 +669,9 @@ EOF
   echo -e "${GREEN}${BOLD}✔ Project '${project}' is ready!${NC}"
   echo ""
   echo -e "  URL       → ${BOLD}https://${domain}${NC}"
-  echo -e "  Database  → ${BOLD}${dbname}${NC}"
+  if [ -n "$dbname" ]; then
+    echo -e "  Database  → ${BOLD}${dbname}${NC}"
+  fi
   echo -e "  Directory → ${BOLD}${target}${NC}"
   echo ""
   echo -e "  ${DIM}Run ${BOLD}damp trust${NC}${DIM} if you haven't yet (HTTPS without warnings).${NC}"
@@ -881,17 +952,32 @@ case "${1:-help}" in
     # 3. PHP-specific questions
     php_version=""
     document_root=""
+    node_port=""
+    node_cmd=""
     if [ "$template" = "frankenphp" ] || [ "$template" = "php-fpm" ] || [ "$template" = "php-legacy" ] || [ "$template" = "php-ancient" ]; then
       detected_php=$(detect_php_version "$target")
       php_version=$(read_input "PHP version [${detected_php}]: " "$detected_php")
 
       detected_root=$(detect_document_root "$target" "$template")
       document_root=$(read_input "Document root [${detected_root}]: " "$detected_root")
+    elif [ "$template" = "node" ]; then
+      detected_port=$(detect_node_port "$target")
+      node_port=$(read_input "Dev server port [${detected_port}]: " "$detected_port")
+      node_cmd=$(detect_node_command "$target")
     fi
 
-    # 4. Database name
+    # 4. Database
     default_db="${project//-/_}_db"
-    dbname=$(read_input "Database name [${default_db}]: " "$default_db")
+    if [ "$template" = "node" ]; then
+      confirm_db=$(read_input "Create database? [y/N]: " "N")
+    else
+      confirm_db=$(read_input "Create database? [Y/n]: " "Y")
+    fi
+    if [ "$confirm_db" = "y" ] || [ "$confirm_db" = "Y" ]; then
+      dbname=$(read_input "Database name [${default_db}]: " "$default_db")
+    else
+      dbname=""
+    fi
 
     # 5. Check for existing Dampfile
     if [ -f "$target/Dampfile" ]; then
@@ -904,11 +990,11 @@ case "${1:-help}" in
     fi
 
     # 6. Generate Dampfile
-    generate_dampfile "$target" "$project" "$template" "$php_version" "$document_root" "$dbname"
+    generate_dampfile "$target" "$project" "$template" "$php_version" "$document_root" "$dbname" "$node_port"
     echo -e "${GREEN}✔ Generated Dampfile${NC}"
 
     # 7. Generate docker-compose.yml
-    generate_docker_compose "$target" "$project" "$template" "$dbname"
+    generate_docker_compose "$target" "$project" "$template" "$dbname" "$node_cmd"
     echo -e "${GREEN}✔ Generated docker-compose.yml${NC}"
 
     # 8. Generate type-specific files
@@ -945,7 +1031,11 @@ case "${1:-help}" in
     echo -e "${GREEN}${BOLD}✔ Project '${project}' configured with Dampfile.${NC}"
 
     # 9. Auto-setup: DB, Caddy, hosts, start
-    setup_project "$project" "$target"
+    if [ "$template" = "node" ]; then
+      setup_project "$project" "$target" "$node_port"
+    else
+      setup_project "$project" "$target"
+    fi
     ;;
 
   # ── New project from template ────────────────────────────────
