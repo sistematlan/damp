@@ -21,7 +21,7 @@ services:
       WORDPRESS_DB_PASSWORD: root
       WORDPRESS_DB_NAME: PROJECT_NAME_db
     volumes:
-      - ./wp-content:/var/www/html/wp-content
+      - ./:/var/www/html
     networks:
       - damp
 
