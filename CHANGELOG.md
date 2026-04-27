@@ -10,6 +10,34 @@ at `1.0.0`, breaking changes will be reserved for major bumps.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-04-27
+
+### Added
+- **Interactive `damp init` with Dampfile generation**: complete rewrite of the init command.
+  - Prompts for project name, type (auto-detected), PHP version, document root, database name.
+  - Generates `Dampfile`, `docker-compose.yml`, and type-specific files (Dockerfile, nginx.conf, Caddyfile) on the fly.
+  - No more template file copying or `.bak` backups.
+- **Node.js first-class support**:
+  - `detect_node_port()`: auto-detects dev server port from `package.json` (Vite 5173, Next.js/Nuxt/CRA 3000, Angular 4200, Astro 4321).
+  - `detect_node_command()`: picks the correct dev command per framework.
+  - `patch_vite_config()`: automatically patches `vite.config.js` with `host: '0.0.0.0'` and `allowedHosts: true` for Caddy reverse-proxy compatibility.
+  - `patch_vite_proxy()`: detects proxy targets using `.test`/`.local`/`.dev` domains and replaces them with Docker container names (e.g., `https://api.test` → `http://api-app:80`).
+- **Optional database creation**: `damp init` now asks "Create database?" — defaults to No for Node.js, Yes for PHP projects.
+- **Desktop app (Tauri) Windows support**:
+  - `get_docker_path()`: detects `docker.exe` on Windows.
+  - `is_docker_desktop_installed()`: cross-platform check (Docker Desktop, OrbStack, Linux).
+  - Native project creation in Rust without bash dependency.
+
+### Changed
+- **WordPress template**: project directory is now fully mounted (`./:/var/www/html`) instead of only `./wp-content`, allowing direct file editing.
+- `setup_project()`: accepts a `proxy_port` parameter so Node.js containers proxy to the correct dev server port instead of hardcoded `:80`.
+- Caddy config generation now uses the detected port (e.g., `reverse_proxy app:5173` for Vite).
+
+### Fixed
+- **Node.js 502 Bad Gateway**: Caddy now proxies to the correct dev server port instead of `:80`.
+- **Vite 403 Forbidden**: `allowedHosts: true` is automatically added to `vite.config.js`.
+- **bash `local` error**: removed `local` declarations from `case` blocks in `damp init`.
+
 ## [0.4.0] — 2026-04-24
 
 ### Added
