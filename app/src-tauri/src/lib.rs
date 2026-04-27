@@ -34,7 +34,7 @@ pub struct RedisInfo {
 pub struct DampStatus {
     docker_running: bool,
     docker_installed: bool,
-    orbstack_installed: bool,
+    docker_desktop_installed: bool,
     damp_path: String,
     tld: String,
     containers: Vec<Container>,
@@ -68,12 +68,50 @@ fn resolve_damp_path() -> PathBuf {
 }
 
 fn get_docker_path() -> String {
-    for p in ["/usr/local/bin/docker", "/usr/bin/docker", "docker"] {
-        if Command::new(p).arg("--version").output().is_ok() {
-            return p.to_string();
+    #[cfg(target_os = "windows")]
+    {
+        // Docker Desktop for Windows paths
+        let windows_paths = [
+            r"C:\Program Files\Docker\Docker\resources\bin\docker.exe",
+            r"C:\ProgramData\DockerDesktop\version-bin\docker.exe",
+        ];
+        for p in &windows_paths {
+            if std::path::Path::new(p).exists() {
+                return p.to_string();
+            }
+        }
+        // Try docker.exe in PATH
+        if Command::new("docker.exe").arg("--version").output().is_ok() {
+            return "docker.exe".to_string();
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        for p in ["/usr/local/bin/docker", "/usr/bin/docker", "docker"] {
+            if Command::new(p).arg("--version").output().is_ok() {
+                return p.to_string();
+            }
         }
     }
     "docker".to_string()
+}
+
+fn is_docker_desktop_installed() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        PathBuf::from("/Applications/Docker.app").exists()
+            || PathBuf::from("/Applications/OrbStack.app").exists()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        PathBuf::from(r"C:\Program Files\Docker\Docker\Docker Desktop.exe").exists()
+            || PathBuf::from(r"C:\ProgramData\DockerDesktop\Docker Desktop.exe").exists()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        // Linux: check for docker-desktop or standard docker
+        Command::new("docker").arg("--version").output().is_ok()
+    }
 }
 
 fn get_tld() -> String {
@@ -185,7 +223,7 @@ fn get_status() -> DampStatus {
     let tld = get_tld();
 
     let docker_installed = Command::new(&docker_bin).arg("--version").output().is_ok();
-    let orbstack_installed = PathBuf::from("/Applications/OrbStack.app").exists();
+    let docker_desktop_installed = is_docker_desktop_installed();
 
     let docker_running = if docker_installed {
         Command::new(&docker_bin)
@@ -305,7 +343,7 @@ fn get_status() -> DampStatus {
     DampStatus {
         docker_running,
         docker_installed,
-        orbstack_installed,
+        docker_desktop_installed,
         damp_path: damp_path.display().to_string(),
         tld,
         containers: container_list,
@@ -561,16 +599,30 @@ fn get_container_logs(name: String, tail: Option<u32>) -> Result<String, String>
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
-    let cmd = "open";
+    {
+        Command::new("open")
+            .arg(&url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
     #[cfg(target_os = "linux")]
-    let cmd = "xdg-open";
+    {
+        Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
     #[cfg(target_os = "windows")]
-    let cmd = "explorer";
-    Command::new(cmd)
-        .arg(&url)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    {
+        // Use `start` command via cmd.exe for reliable URL opening on Windows
+        Command::new("cmd")
+            .args(["/c", "start", "", &url])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
 }
 
 #[tauri::command]
@@ -591,29 +643,91 @@ fn get_templates() -> Vec<String> {
 #[tauri::command]
 fn create_project(name: String, template: String) -> Result<String, String> {
     let damp_path = resolve_damp_path();
-    let damp_script = damp_path.join("damp");
     let docker_bin = get_docker_path();
+    let templates_dir = damp_path.join("templates").join(&template);
     let project_path = damp_path.join(&name);
+    let tld = get_tld();
 
-    let output = Command::new("bash")
-        .arg(damp_script)
-        .arg("new")
-        .arg(template)
-        .arg(&name)
-        .current_dir(&damp_path)
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    if !templates_dir.exists() {
+        return Err(format!("Template '{}' not found", template));
     }
 
+    // 1. Create project directory and copy template files
+    std::fs::create_dir_all(&project_path).map_err(|e| e.to_string())?;
+    copy_dir_all(&templates_dir, &project_path).map_err(|e| e.to_string())?;
+
+    // 2. Replace PROJECT_NAME in all files
+    replace_in_dir(&project_path, "PROJECT_NAME", &name).map_err(|e| e.to_string())?;
+
+    // 3. Create database
+    let db_name = name.replace('-', "_");
+    let _ = Command::new(&docker_bin)
+        .args([
+            "exec", "damp-db", "mysql", "-uroot", "-proot", "-e",
+            &format!(
+                "CREATE DATABASE IF NOT EXISTS `{}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
+                db_name
+            ),
+        ])
+        .output();
+
+    // 4. Generate Caddy config
+    let caddy_dir = damp_path.join("caddy").join("projects.d");
+    std::fs::create_dir_all(&caddy_dir).map_err(|e| e.to_string())?;
+    let domain = format!("{}.{}", name, tld);
+    let caddy_config = format!("{} {{\n    reverse_proxy {}-app:80\n}}\n", domain, name);
+    let caddy_file = caddy_dir.join(format!("{}.caddy", name));
+    std::fs::write(&caddy_file, caddy_config).map_err(|e| e.to_string())?;
+
+    // 5. Reload Caddy
+    let _ = Command::new(&docker_bin)
+        .args(["compose", "up", "-d", "caddy", "--force-recreate"])
+        .current_dir(&damp_path)
+        .output();
+
+    // 6. Start project containers
     let _ = Command::new(&docker_bin)
         .args(["compose", "up", "-d"])
         .current_dir(&project_path)
         .output();
 
-    Ok(format!("Project '{}' created and started", name))
+    // 7. Register project
+    let _ = add_project(name.clone(), project_path.display().to_string(), template);
+
+    Ok(format!("Project '{}' created and started at https://{}", name, domain))
+}
+
+fn copy_dir_all(src: &PathBuf, dst: &PathBuf) -> Result<(), String> {
+    std::fs::create_dir_all(dst).map_err(|e| e.to_string())?;
+    for entry in std::fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        let dest = dst.join(entry.file_name());
+        if path.is_dir() {
+            copy_dir_all(&path, &dest)?;
+        } else {
+            std::fs::copy(&path, &dest).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn replace_in_dir(dir: &PathBuf, from: &str, to: &str) -> Result<(), String> {
+    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.is_dir() {
+            replace_in_dir(&path, from, to)?;
+        } else {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                let new_content = content.replace(from, to);
+                if new_content != content {
+                    std::fs::write(&path, new_content).map_err(|e| e.to_string())?;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -722,10 +836,9 @@ fn delete_project(path: String) -> Result<String, String> {
         ])
         .output();
 
-    let damp_script = damp_path.join("bin").join("damp");
-    let _ = Command::new("bash")
-        .arg(damp_script)
-        .arg("reload")
+    // Reload Caddy (cross-platform replacement for `damp reload`)
+    let _ = Command::new(&docker_bin)
+        .args(["compose", "up", "-d", "caddy", "--force-recreate"])
         .current_dir(&damp_path)
         .output();
 
@@ -782,10 +895,10 @@ fn adopt_project(path: String, template: String) -> Result<String, String> {
         .join(format!("{}.caddy", project_name));
     std::fs::write(caddy_file_path, caddy_conf).map_err(|e| e.to_string())?;
 
-    let damp_script = damp_path.join("bin").join("damp");
-    let _ = Command::new("bash")
-        .arg(damp_script)
-        .arg("reload")
+    // Reload Caddy (cross-platform replacement for `damp reload`)
+    let docker_bin = get_docker_path();
+    let _ = Command::new(&docker_bin)
+        .args(["compose", "up", "-d", "caddy", "--force-recreate"])
         .current_dir(&damp_path)
         .output();
 

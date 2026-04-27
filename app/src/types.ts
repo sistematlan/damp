@@ -19,7 +19,7 @@ export interface RedisInfo {
 export interface DampStatus {
   docker_running: boolean;
   docker_installed: boolean;
-  orbstack_installed: boolean;
+  docker_desktop_installed: boolean;
   damp_path: string;
   tld: string;
   containers: Container[];
