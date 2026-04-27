@@ -110,9 +110,10 @@ database:
   create: true
 ```
 
-Place a `Dampfile` in your project root and DAMP handles the rest:
-- Generates `docker-compose.yml` automatically
-- No Dockerfile needed
+Run `damp init` from your project directory and DAMP handles the rest:
+- Generates `Dampfile` with your project's configuration
+- Generates `docker-compose.yml` tailored to your stack
+- Generates type-specific files (Dockerfile, nginx.conf, Caddyfile) only when needed
 - No manual Caddy configuration
 - No template files to copy
 
@@ -149,7 +150,7 @@ This creates a new directory with template files (legacy method — Dampfile pre
 Open https://damp.test → **Projects**:
 
 - **New Project** — Enter a name and select a template. Creates the database and Caddy config. Run `damp new <name>` to scaffold the files.
-- **Add Existing Folder** — Browse your filesystem, select a folder. DAMP auto-detects the template, copies files if needed, creates DB + Caddy config, and starts the containers.
+- **Add Existing Folder** — Browse your filesystem, select a folder. DAMP auto-detects the template, generates a `Dampfile`, creates DB + Caddy config, and starts the containers.
 
 Each project has **play/stop/restart/delete** controls in the dashboard.
 
@@ -347,7 +348,7 @@ The web dashboard at https://damp.test provides a premium dark UI with:
 
 If you have existing projects created with the legacy template system (pre-v0.4.0), you can migrate them:
 
-1. Delete old template files: `rm Dockerfile docker-compose.yml Caddyfile *.bak`
+1. Delete old template files: `rm Dockerfile docker-compose.yml Caddyfile nginx.conf`
 2. Run `damp init` from your project directory
 3. The interactive wizard will detect your setup and generate a `Dampfile`
 4. Commit the `Dampfile` to your repo — it's all you need
