@@ -35,14 +35,18 @@ function switchLogContainer() {
 
   logSource = new EventSource('/api/containers/' + name + '/logs');
   logSource.onmessage = function(event) {
-    output.textContent += event.data + '\n';
     var checkbox = document.getElementById('log-autoscroll');
-    if (checkbox && checkbox.checked) {
+    var isAtBottom = output.scrollHeight - output.clientHeight <= output.scrollTop + 50;
+
+    output.textContent += event.data + '\n';
+    
+    if (checkbox && checkbox.checked && isAtBottom) {
       output.scrollTop = output.scrollHeight;
     }
   };
   logSource.onerror = function() {
-    output.textContent += '\n' + t('connectionLost') + '\n';
+    output.innerHTML += '<div style="color:var(--red);margin-top:10px;">' + t('connectionLost') + '</div>';
+    logSource.close();
   };
 }
 

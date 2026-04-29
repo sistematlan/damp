@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { DampStatus, Project } from "./types";
+import type { DampStatus, Project, Template } from "./types";
 import { initLang, setLang, t } from "./i18n/translations";
 import Overview from "./components/Overview";
 import Projects from "./components/Projects";
@@ -18,7 +18,7 @@ const NAV_ITEMS = [
 export default function App() {
   const [status, setStatus] = useState<DampStatus | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [templates, setTemplates] = useState<string[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
@@ -28,7 +28,7 @@ export default function App() {
     try {
       const [s, tpl, p] = await Promise.all([
         invoke<DampStatus>("get_status"),
-        invoke<string[]>("get_templates"),
+        invoke<Template[]>("get_templates"),
         invoke<Project[]>("get_projects"),
       ]);
       setStatus(s);

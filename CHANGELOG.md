@@ -10,6 +10,25 @@ at `1.0.0`, breaking changes will be reserved for major bumps.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-04-29
+
+### Added
+- **Architectural Unification (Desktop ↔ Go Backend)**:
+  - Tauri app now acts as a client for the Go HTTP API (`localhost:9000`).
+  - Multi-platform Go dashboard binaries bundled as sidecars (Windows, macOS Intel/M1, Linux).
+  - Native database backups on project deletion via Go backend logic.
+- **Real-time Streaming Logs**:
+  - Migrated `Logs.tsx` to Server-Sent Events (SSE).
+  - Instant log streaming from Docker containers via Go backend.
+- **UI/UX Enhancements**:
+  - **Template Gallery**: Replaced simple selects with descriptive cards for project templates.
+  - **Project Adoption Preview**: Shows detected files and path before importing folders.
+  - **Service Grid**: Added `damp-dashboard` status to the Overview dashboard.
+
+### Changed
+- Replaced Rust-native Docker/Caddy logic in Tauri with HTTP API calls to the Go sidecar.
+- Increased default window size for better dashboard visibility.
+
 ## [0.5.0] — 2026-04-27
 
 ### Added

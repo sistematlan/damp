@@ -34,6 +34,11 @@ export interface Project {
   template: string;
 }
 
+export interface Template {
+  name: string;
+  description: string;
+}
+
 export interface ProjectSuggestion {
   path: string;
   suggested_template: string;

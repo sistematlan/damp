@@ -57,7 +57,7 @@ func main() {
 
 	// API routes
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		internal.HandleStatus(w, r, dockerClient, dbClient)
+		internal.HandleStatus(w, r, dockerClient, dbClient, pgClient, redisHost)
 	})
 	mux.HandleFunc("/api/containers", func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleContainers(w, r, dockerClient)

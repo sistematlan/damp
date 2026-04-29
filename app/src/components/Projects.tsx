@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { DampStatus, Project, ProjectSuggestion } from "../types";
+import type { DampStatus, Project, ProjectSuggestion, Template } from "../types";
 import { t } from "../i18n/translations";
 
 interface ProjectsProps {
   status: DampStatus;
   projects: Project[];
-  templates: string[];
+  templates: Template[];
   onRefresh: () => void;
 }
 
@@ -73,29 +73,23 @@ export default function Projects({ status, projects, templates, onRefresh }: Pro
   };
 
   const handleStart = async (p: Project) => {
-    try { await invoke("start_project", { path: p.path }); onRefresh(); }
+    try { await invoke("start_project", { name: p.name }); onRefresh(); }
     catch (e) { setMessage({ text: String(e), type: "error" }); clearMessage(); }
   };
 
   const handleStop = async (p: Project) => {
-    try { await invoke("stop_project", { path: p.path }); onRefresh(); }
+    try { await invoke("stop_project", { name: p.name }); onRefresh(); }
     catch (e) { setMessage({ text: String(e), type: "error" }); clearMessage(); }
   };
 
   const handleRestart = async (p: Project) => {
-    try { await invoke("restart_project", { path: p.path }); onRefresh(); }
+    try { await invoke("restart_project", { name: p.name }); onRefresh(); }
     catch (e) { setMessage({ text: String(e), type: "error" }); clearMessage(); }
   };
 
   const handleDelete = async (p: Project) => {
     if (!confirm(t("confirmDelete"))) return;
-    try { await invoke("delete_project", { path: p.path }); onRefresh(); }
-    catch (e) { setMessage({ text: String(e), type: "error" }); clearMessage(); }
-  };
-
-  const handleRemove = async (p: Project) => {
-    if (!confirm(`Remove "${p.name}" from registry?`)) return;
-    try { await invoke("remove_project", { path: p.path }); onRefresh(); }
+    try { await invoke("delete_project", { name: p.name }); onRefresh(); }
     catch (e) { setMessage({ text: String(e), type: "error" }); clearMessage(); }
   };
 
@@ -133,11 +127,20 @@ export default function Projects({ status, projects, templates, onRefresh }: Pro
           </div>
           <div className="form-row">
             <span className="form-label">{t("selectTemplate")}</span>
-            <select className="input" style={{ flex: 1 }} value={newTemplate} onChange={(e) => setNewTemplate(e.target.value)}>
-              {templates.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            <div className="template-grid" style={{ flex: 1 }}>
+              {templates.map((tpl) => (
+                <div
+                  key={tpl.name}
+                  className={`template-card ${newTemplate === tpl.name ? "active" : ""}`}
+                  onClick={() => setNewTemplate(tpl.name)}
+                >
+                  <div className="template-card-name">{tpl.name}</div>
+                  <div className="template-card-desc">{tpl.description}</div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button className="btn btn-primary" onClick={handleCreate} disabled={loading || !newName.trim()}>
               {loading ? t("creating") : t("create")}
             </button>
@@ -148,24 +151,30 @@ export default function Projects({ status, projects, templates, onRefresh }: Pro
 
       {suggestion && (
         <div className="adopt-panel">
-          <h4>{suggestion.path.split("/").pop()}</h4>
-          {suggestion.detected_files.length > 0 && (
-            <div style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 8 }}>
-              {t("detectedAs")}: {suggestion.detected_files.join(", ")}
-            </div>
-          )}
+          <h3>{t("adoptFolder")}</h3>
+          <div className="adopt-preview">
+            <div className="adopt-path">{suggestion.path}</div>
+            {suggestion.detected_files.length > 0 && (
+              <div className="detected-files">
+                {t("detectedAs")}: {suggestion.detected_files.join(", ")}
+              </div>
+            )}
+          </div>
+          
+          <div className="form-label" style={{ marginBottom: 8 }}>{t("selectTemplate")}</div>
           <div className="template-grid">
-            {templates.map((t) => (
-              <button
-                key={t}
-                className={`tpl-btn ${selectedTemplate === t ? "active" : ""}`}
-                onClick={() => setSelectedTemplate(t)}
+            {templates.map((tpl) => (
+              <div
+                key={tpl.name}
+                className={`template-card ${selectedTemplate === tpl.name ? "active" : ""}`}
+                onClick={() => setSelectedTemplate(tpl.name)}
               >
-                {t}
-              </button>
+                <div className="template-card-name">{tpl.name}</div>
+                <div className="template-card-desc">{tpl.description}</div>
+              </div>
             ))}
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
             <button className="btn btn-primary" onClick={handleAdopt} disabled={loading || !selectedTemplate}>
               {loading ? t("creating") : t("confirmAdopt")}
             </button>

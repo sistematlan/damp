@@ -53,7 +53,10 @@ function renderServiceGrid(services) {
 }
 
 async function renderOverview(el) {
-  el.innerHTML = '<div class="loading">Loading...</div>';
+  // Only show loading if the view is empty
+  if (!el.innerHTML || el.innerHTML.includes('empty')) {
+    el.innerHTML = '<div class="loading" style="padding:40px;text-align:center;opacity:0.5;">Initializing DAMP...</div>';
+  }
 
   try {
     var data = await api('/api/status');
@@ -61,28 +64,31 @@ async function renderOverview(el) {
     var dampServices = allContainers.filter(function(c) { return c.is_damp; });
     var projects = allContainers.filter(function(c) { return !c.is_damp; });
     var running = allContainers.filter(function(c) { return c.state === 'running'; }).length;
-    var dbs = data.databases || [];
+    var mysqlDbs = data.databases || [];
+    var pgDbs = data.postgres_databases || [];
+    var allDbs = mysqlDbs.concat(pgDbs);
     var services = getServiceInfo(allContainers);
 
-    el.innerHTML =
-      '<div class="grid-3 fade-in" style="margin-bottom: 24px;">' +
-        '<div class="stat">' +
-          '<div class="stat-value">' + running + '</div>' +
-          '<div class="stat-label">' + t('containersRunning') + '</div>' +
+    // Build the new HTML in memory first to avoid partial renders
+    var newHTML =
+      '<div class="grid-3 fade-in" style="margin-bottom: 20px;">' +
+        '<div class="stat-mini">' +
+          '<div class="stat-mini-value">' + running + '</div>' +
+          '<div class="stat-mini-label">' + t('containersRunning') + '</div>' +
         '</div>' +
-        '<div class="stat">' +
-          '<div class="stat-value">' + projects.length + '</div>' +
-          '<div class="stat-label">' + t('projects') + '</div>' +
+        '<div class="stat-mini">' +
+          '<div class="stat-mini-value">' + projects.length + '</div>' +
+          '<div class="stat-mini-label">' + t('projects') + '</div>' +
         '</div>' +
-        '<div class="stat">' +
-          '<div class="stat-value">' + dbs.length + '</div>' +
-          '<div class="stat-label">' + t('databases') + '</div>' +
+        '<div class="stat-mini">' +
+          '<div class="stat-mini-value">' + allDbs.length + '</div>' +
+          '<div class="stat-mini-label">' + t('databases') + '</div>' +
         '</div>' +
       '</div>' +
 
-      '<div class="card fade-in">' +
-        '<div class="card-header">' +
-          '<span class="card-title">' + t('services') + '</span>' +
+      '<div class="card fade-in" style="padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.01);">' +
+        '<div class="card-header" style="margin-bottom: 12px;">' +
+          '<span class="card-title" style="font-size: 10px; opacity: 0.5;">' + t('services') + '</span>' +
           '<div class="container-actions">' +
             '<button class="btn btn-sm btn-primary" id="btn-engine-up" onclick="engineAction(\'up\')">▶ ' + t('start') + '</button>' +
             '<button class="btn btn-sm btn-danger" id="btn-engine-down" onclick="engineAction(\'down\')">■ ' + t('stop') + '</button>' +
@@ -96,7 +102,7 @@ async function renderOverview(el) {
       '<div class="grid-2">' +
         '<div class="card fade-in">' +
           '<div class="card-header">' +
-            '<span class="card-title">' + t('projects') + '</span>' +
+            '<span class="card-title" style="font-size: 10px; opacity: 0.5;">' + t('projects') + '</span>' +
             '<span class="card-count">' + projects.length + '</span>' +
           '</div>' +
           '<div id="container-list">' + renderContainerRows(projects) + '</div>' +
@@ -104,16 +110,18 @@ async function renderOverview(el) {
 
         '<div class="card fade-in">' +
           '<div class="card-header">' +
-            '<span class="card-title">' + t('databases') + '</span>' +
-            '<span class="card-count">' + dbs.length + '</span>' +
+            '<span class="card-title" style="font-size: 10px; opacity: 0.5;">' + t('databases') + '</span>' +
+            '<span class="card-count">' + allDbs.length + '</span>' +
           '</div>' +
           '<div class="db-grid" style="padding: 4px 0;">' +
-            dbs.map(function(db) {
+            allDbs.map(function(db) {
               return '<div class="db-card"><span>' + db + '</span></div>';
             }).join('') +
           '</div>' +
         '</div>' +
       '</div>';
+      
+    el.innerHTML = newHTML;
   } catch (e) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">' + t('cannotConnect') + '</div></div>';
   }

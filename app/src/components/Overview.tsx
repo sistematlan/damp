@@ -9,6 +9,7 @@ interface OverviewProps {
 
 const SERVICE_INFO: Record<string, { label: string; detail: string; port: string; url?: string }> = {
   "damp-caddy": { label: "Caddy", detail: "Reverse Proxy / HTTPS", port: "443", url: "dashboard" },
+  "damp-dashboard": { label: "Dashboard", detail: "Go API / Backend", port: "9000" },
   "damp-db": { label: "MySQL 8.4", detail: "Database", port: "3306" },
   "damp-postgres": { label: "PostgreSQL 16", detail: "Database", port: "5432" },
   "damp-redis": { label: "Redis 7", detail: "Cache", port: "6379" },
@@ -21,6 +22,7 @@ export default function Overview({ status, projects, onNavigate }: OverviewProps
   const tld = status.tld || "test";
 
   const getServiceStatus = (name: string) => {
+    if (name === "damp-dashboard") return "running"; // If we're here, dashboard is responding
     const c = status.containers.find((co) => co.name === name);
     return c?.status || "";
   };

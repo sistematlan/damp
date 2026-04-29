@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -304,7 +305,7 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 	}
 
 	// 4. Reload Caddy via admin API (stays inside Docker network)
-	if err := reloadCaddy(); err != nil {
+	if err := reloadCaddy(c.dampDir); err != nil {
 		// Non-fatal: project config file is already written; Caddy
 		// will pick it up on next restart.
 		fmt.Fprintf(os.Stderr, "caddy reload warning: %v\n", err)
@@ -521,7 +522,7 @@ func (c *ConfigClient) DeleteProject(name string, dc *DockerClient, dbClient *Da
 	c.UnregisterProject(name)
 
 	// 6. Reload Caddy via admin API
-	reloadCaddy() // best-effort: project config file is already deleted
+	reloadCaddy(c.dampDir) // best-effort: project config file is already deleted
 
 	return dumpPath, nil
 }
@@ -564,41 +565,50 @@ type DirEntry struct {
 }
 
 // reloadCaddy tells Caddy to re-read its Caddyfile via the admin API.
-// This picks up any new project configs added to projects.d/ without
-// recreating the container.  Works across all Docker runtimes (macOS,
-// Linux, WSL2) because the call stays inside the Docker network.
-func reloadCaddy() error {
-	caddyfile, err := os.ReadFile("/damp/caddy/Caddyfile")
+func reloadCaddy(dampDir string) error {
+	caddyfilePath := filepath.Join(dampDir, "caddy", "Caddyfile")
+	caddyfile, err := os.ReadFile(caddyfilePath)
 	if err != nil {
 		return fmt.Errorf("read Caddyfile: %w", err)
 	}
-	resp, err := http.Post(
-		"http://damp-caddy:2019/load",
-		"application/caddyfile",
-		strings.NewReader(string(caddyfile)),
-	)
-	if err != nil {
-		return fmt.Errorf("caddy reload: %w", err)
+
+	// Try internal Docker network first, then localhost (for sidecar mode)
+	urls := []string{"http://damp-caddy:2019/load", "http://localhost:2019/load"}
+	var lastErr error
+	for _, url := range urls {
+		resp, err := http.Post(
+			url,
+			"application/caddyfile",
+			strings.NewReader(string(caddyfile)),
+		)
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode < 400 {
+				return nil
+			}
+			body, _ := io.ReadAll(resp.Body)
+			lastErr = fmt.Errorf("caddy reload %s: %s — %s", url, resp.Status, string(body))
+		} else {
+			lastErr = fmt.Errorf("caddy reload %s: %w", url, err)
+		}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("caddy reload: %s — %s", resp.Status, string(body))
-	}
-	return nil
+	return lastErr
 }
 
-// addHostEntry appends "127.0.0.1  domain" to /etc/hosts if not already present.
-//
-// This is a best-effort fallback. The primary DNS mechanism is a host-native
-// dnsmasq instance configured by setup-dns.sh, which resolves all *.TLD domains
-// to 127.0.0.1 without requiring per-project /etc/hosts entries.
-//
-// On macOS with Docker/OrbStack the /etc/hosts bind-mount is read-only from
-// the host's perspective, so writes here only affect the container. On Linux
-// with a writable bind-mount it works as expected. Either way, if dnsmasq is
-// running on the host this function is a no-op (domain already resolves).
+// addHostEntry appends "127.0.0.1  domain" to the hosts file if not already present.
 func addHostEntry(domain string) {
+	if runtime.GOOS == "windows" {
+		// Use PowerShell to add entry to Windows hosts file
+		checkCmd := fmt.Sprintf("Get-Content C:\\Windows\\System32\\drivers\\etc\\hosts | Select-String -Pattern '127.0.0.1\\s+%s'", domain)
+		if err := exec.Command("powershell", "-NoProfile", "-Command", checkCmd).Run(); err != nil {
+			// Not found, add it (requires admin if not running as admin, but we'll try)
+			addCmd := fmt.Sprintf("Add-Content -Path C:\\Windows\\System32\\drivers\\etc\\hosts -Value \"`n127.0.0.1 %s\" -ErrorAction SilentlyContinue", domain)
+			// Try running directly first
+			_ = exec.Command("powershell", "-NoProfile", "-Command", addCmd).Run()
+		}
+		return
+	}
+
 	hostsPath := "/etc/hosts"
 	data, err := os.ReadFile(hostsPath)
 	if err != nil {

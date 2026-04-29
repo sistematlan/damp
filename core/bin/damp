@@ -756,6 +756,8 @@ detect_node_command() {
   else
     echo 'npm install && npm run dev -- --host'
   fi
+}
+
 # ── Windows Interop Helpers ─────────────────────────────────────
 is_wsl() {
   grep -qi microsoft /proc/version 2>/dev/null

@@ -1,0 +1,40 @@
+# =============================================================
+# DAMP Template: PHP-FPM + Nginx (PHP 8.4)
+# =============================================================
+# Classic setup for: CodeIgniter 4, Laravel, WordPress, Symfony
+# Change version in Dockerfile: php:8.3-fpm, php:8.2-fpm, etc.
+# =============================================================
+
+services:
+  app:
+    build: .
+    container_name: mi-web-app
+    volumes:
+      - ./:/app
+    environment:
+      - CI_ENVIRONMENT=development
+      - database.default.hostname=damp-db
+      - database.default.database=mi-web_db
+      - database.default.username=root
+      - database.default.password=root
+      - database.default.DBDriver=MySQLi
+      - database.default.port=3306
+    restart: unless-stopped
+    networks:
+      - damp
+
+  web:
+    image: nginx:alpine
+    container_name: mi-web-web
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./:/app:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - damp
+
+networks:
+  damp:
+    external: true

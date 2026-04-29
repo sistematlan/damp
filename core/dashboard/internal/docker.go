@@ -8,28 +8,36 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 )
 
 const NetworkName = "damp"
 
+func dialDocker() (net.Conn, error) {
+	if runtime.GOOS == "windows" {
+		return net.Dial("unix", "//./pipe/docker_engine")
+	}
+	return net.Dial("unix", "/var/run/docker.sock")
+}
+
 type DockerClient struct {
 	httpClient *http.Client
 }
 
 type ContainerInfo struct {
-	Name    string `json:"name"`
-	Status  string `json:"status"`
-	State   string `json:"state"`
-	Image   string `json:"image"`
-	IsDamp  bool   `json:"is_damp"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	State  string `json:"state"`
+	Image  string `json:"image"`
+	IsDamp bool   `json:"is_damp"`
 }
 
 func NewDockerClient() (*DockerClient, error) {
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return net.Dial("unix", "/var/run/docker.sock")
+			return dialDocker()
 		},
 	}
 	client := &http.Client{Transport: transport, Timeout: 10 * time.Second}
@@ -37,7 +45,7 @@ func NewDockerClient() (*DockerClient, error) {
 	// Test connection
 	resp, err := client.Get("http://localhost/version")
 	if err != nil {
-		return nil, fmt.Errorf("cannot connect to Docker socket: %w", err)
+		return nil, fmt.Errorf("cannot connect to Docker: %w", err)
 	}
 	resp.Body.Close()
 
@@ -234,7 +242,7 @@ func HandleProjectAction(w http.ResponseWriter, r *http.Request, dc *DockerClien
 func (d *DockerClient) StreamLogs(name string) (io.ReadCloser, error) {
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return net.Dial("unix", "/var/run/docker.sock")
+			return dialDocker()
 		},
 	}
 	client := &http.Client{Transport: transport} // no timeout for streaming
@@ -377,7 +385,7 @@ func sendContainerStatus(w http.ResponseWriter, flusher http.Flusher, dc *Docker
 	flusher.Flush()
 }
 
-func HandleStatus(w http.ResponseWriter, r *http.Request, dc *DockerClient, db *DatabaseClient) {
+func HandleStatus(w http.ResponseWriter, r *http.Request, dc *DockerClient, db *DatabaseClient, pg *PostgresClient, redisHost string) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -386,11 +394,15 @@ func HandleStatus(w http.ResponseWriter, r *http.Request, dc *DockerClient, db *
 	ctx := r.Context()
 	containers, _ := dc.ListContainers(ctx)
 	databases, _ := db.ListDatabases()
+	pgDatabases, _ := pg.ListDatabases()
+	redis := GetRedisInfo(redisHost)
 
 	status := map[string]interface{}{
 		"docker_running": true,
 		"containers":     containers,
 		"databases":      databases,
+		"postgres_databases": pgDatabases,
+		"redis":          redis,
 	}
 	jsonResponse(w, status)
 }

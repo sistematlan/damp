@@ -13,6 +13,7 @@ let containers = [];
 
 // ── Router ─────────────────────────────────────────────
 function navigate(path) {
+  const isInitialLoad = !currentView;
   currentView = path;
   const view = views[path] || views['/'];
 
@@ -24,9 +25,8 @@ function navigate(path) {
   // Update title
   document.getElementById('page-title').textContent = view.title;
 
-  // Render
+  // Render without clearing if not initial to prevent flicker
   const container = document.getElementById('view');
-  container.innerHTML = '';
   view.render(container);
 }
 

@@ -24,18 +24,22 @@ export default function Logs({ status }: LogsProps) {
   useEffect(() => {
     if (!selected || !polling) return;
 
-    const fetchLogs = async () => {
-      try {
-        const result = await invoke<string>("get_container_logs", { name: selected, tail: 500 });
-        setLogs(result);
-      } catch {
-        setLogs("Error fetching logs");
-      }
+    const eventSource = new EventSource(`http://localhost:9000/api/containers/${selected}/logs`);
+    
+    eventSource.onmessage = (event) => {
+      setLogs((prev) => prev + event.data + "\n");
     };
 
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 2000);
-    return () => clearInterval(interval);
+    eventSource.onerror = (err) => {
+      console.error("EventSource failed:", err);
+      setLogs((prev) => prev + "[Connection Error]\n");
+      eventSource.close();
+      setPolling(false);
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, [selected, polling]);
 
   useEffect(() => {
