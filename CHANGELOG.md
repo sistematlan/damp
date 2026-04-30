@@ -10,6 +10,17 @@ at `1.0.0`, breaking changes will be reserved for major bumps.
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-04-30
+
+### Fixed
+- **`damp init` 502 Bad Gateway**: resolved multiple Docker Compose naming and DNS issues.
+  - Removed invalid `--no-prefix` flag (does not exist in Docker Compose).
+  - Added `name:` at the top-level of all generated `docker-compose.yml` files so Docker Compose respects the project name.
+  - Added `hostname:` to app/web services for robust DNS resolution inside the `damp` network.
+  - Auto-removes residual `compose.yaml` (Laravel 11+ default) which Docker Compose prioritizes over our `docker-compose.yml`.
+  - Fixed `node` template incorrectly using `build: .` instead of `image: node:22-alpine`.
+- **`damp trust` hardcoded TLD**: `trust-cert.sh` now dynamically uses `$DAMP_TLD` (default `.test`) instead of hardcoding `*.local`.
+
 ## [0.6.0] — 2026-04-29
 
 ### Added

@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================
 #  DAMP — Trust Caddy's CA
-#  After running this, *.local HTTPS domains work without warnings.
+#  After running this, *.${DAMP_TLD:-test} HTTPS domains work without warnings.
 #  Supports: macOS, Linux (Debian/Ubuntu, RHEL/Fedora), WSL2
 # =============================================================
 set -euo pipefail
@@ -12,6 +12,15 @@ RED="\033[0;31m"
 DIM="\033[2m"
 BOLD="\033[1m"
 NC="\033[0m"
+
+# Load .env for DAMP_TLD
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../.env" ]; then
+  set -a
+  source "$SCRIPT_DIR/../.env"
+  set +a
+fi
+DAMP_TLD="${DAMP_TLD:-test}"
 
 CERT_PATH="/tmp/damp-caddy-root-ca.crt"
 CONTAINER="damp-caddy"
@@ -83,7 +92,7 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}Done! HTTPS domains (*.local) are now trusted.${NC}"
+echo -e "${GREEN}Done! HTTPS domains (*.${DAMP_TLD}) are now trusted.${NC}"
 echo "You may need to restart your browser."
 
 rm -f "$CERT_PATH"

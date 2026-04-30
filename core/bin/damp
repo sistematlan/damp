@@ -231,10 +231,12 @@ generate_docker_compose() {
   case "$ptype" in
     frankenphp)
       cat > "$target/docker-compose.yml" <<EOF
+name: ${project}
 services:
   app:
     build: .
-    container_name: ${project}-app
+    container_name: ${project}
+    hostname: ${project}
     environment:
       - CI_ENVIRONMENT=development
       - database.default.hostname=damp-db
@@ -257,10 +259,11 @@ EOF
       ;;
     php-fpm)
       cat > "$target/docker-compose.yml" <<EOF
+name: ${project}
 services:
   app:
     build: .
-    container_name: ${project}-app
+    container_name: ${project}
     volumes:
       - ./:/app
     environment:
@@ -277,7 +280,8 @@ services:
 
   web:
     image: nginx:alpine
-    container_name: ${project}-web
+    container_name: ${project}-nginx
+    hostname: ${project}
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./:/app:ro
@@ -294,10 +298,11 @@ EOF
       ;;
     php-legacy)
       cat > "$target/docker-compose.yml" <<EOF
+name: ${project}
 services:
   app:
     build: .
-    container_name: ${project}-app
+    container_name: ${project}
     volumes:
       - ./:/app
     environment:
@@ -308,7 +313,8 @@ services:
 
   web:
     image: nginx:alpine
-    container_name: ${project}-web
+    container_name: ${project}-nginx
+    hostname: ${project}
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./:/app:ro
@@ -325,10 +331,12 @@ EOF
       ;;
     php-ancient)
       cat > "$target/docker-compose.yml" <<EOF
+name: ${project}
 services:
   app:
     build: .
-    container_name: ${project}-app
+    container_name: ${project}
+    hostname: ${project}
     volumes:
       - ./:/var/www/html
     environment:
@@ -347,10 +355,12 @@ EOF
       ;;
     node)
       cat > "$target/docker-compose.yml" <<EOF
+name: ${project}
 services:
   app:
     image: node:22-alpine
-    container_name: ${project}-app
+    container_name: ${project}
+    hostname: ${project}
     working_dir: /app
     volumes:
       - ./:/app
@@ -368,10 +378,12 @@ EOF
       ;;
     wordpress)
       cat > "$target/docker-compose.yml" <<EOF
+name: ${project}
 services:
   app:
     image: wordpress:latest
-    container_name: ${project}-app
+    container_name: ${project}
+    hostname: ${project}
     restart: unless-stopped
     environment:
       WORDPRESS_DB_HOST: damp-db
@@ -637,7 +649,7 @@ patch_vite_proxy() {
 
   echo -e "${YELLOW}Vite proxy target uses local domain (e.g., .test).${NC}"
   echo -e "${DIM}Inside Docker, domains like 'project.test' won't resolve.${NC}"
-  echo -e "${DIM}DAMP can switch proxy targets to container names (e.g., http://project-app:80).${NC}"
+  echo -e "${DIM}DAMP can switch proxy targets to container names (e.g., http://project:80).${NC}"
   local confirm_proxy
   confirm_proxy=$(read_input "Fix proxy targets for Docker network? [Y/n]: " "Y")
   if [ "$confirm_proxy" != "y" ] && [ "$confirm_proxy" != "Y" ]; then
@@ -656,8 +668,8 @@ with open(path, 'r') as f:
     content = f.read()
 
 # Replace proxy targets pointing to .test/.local/.dev domains
-# https://some-project.test  -> http://some-project-app:80
-# http://api.local           -> http://api-app:80
+# https://some-project.test  -> http://some-project:80
+# http://api.local           -> http://api:80
 
 def replace_target(match):
     full = match.group(0)
@@ -671,7 +683,7 @@ def replace_target(match):
     # Remove port if present
     domain_no_port = domain.split(':')[0]
     project_name = domain_no_port.split('.')[0]
-    new_url = f'http://{project_name}-app:80'
+    new_url = f'http://{project_name}:80'
     return full.replace(url, new_url)
 
 # Match both single and double quotes
@@ -813,7 +825,7 @@ setup_project() {
   mkdir -p "$PROJECTS_DIR"
   cat > "$PROJECTS_DIR/${project}.caddy" <<EOF
 ${domain} {
-    reverse_proxy ${project}-app:${proxy_port}
+    reverse_proxy ${project}:${proxy_port}
 }
 EOF
   echo -e "${DIM}Caddy config created: projects.d/${project}.caddy${NC}"
@@ -834,9 +846,15 @@ EOF
   echo -e "${DIM}Reloading Caddy...${NC}"
   docker compose up -d caddy --force-recreate >/dev/null 2>&1
 
+  # 4b. Clean up residual files that interfere with Docker Compose
+  if [ -f "$target/compose.yaml" ]; then
+    echo -e "${DIM}Removing residual compose.yaml (Laravel default)...${NC}"
+    rm -f "$target/compose.yaml"
+  fi
+
   # 5. Start project
   echo -e "${DIM}Starting project containers...${NC}"
-  (cd "$target" && docker compose up -d)
+  (cd "$target" && docker compose up -d --build --remove-orphans)
 
   echo ""
   echo -e "${GREEN}${BOLD}✔ Project '${project}' is ready!${NC}"
@@ -1053,7 +1071,7 @@ case "${1:-help}" in
     fi
 
     echo -e "${GREEN}Starting $project...${NC}"
-    (cd "$project_dir" && docker compose up -d)
+    (cd "$project_dir" && docker compose up -d --build --remove-orphans)
     echo -e "${GREEN}$project is running.${NC}"
     ;;
 
