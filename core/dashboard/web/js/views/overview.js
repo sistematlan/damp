@@ -35,27 +35,24 @@ function getServiceInfo(containers) {
 
 function renderServiceGrid(services) {
   return services.map(function(s, i) {
-    var linkStart = s.url ? '<a href="' + s.url + '" target="_blank" style="text-decoration:none;color:inherit;">' : '';
-    var linkEnd = s.url ? '</a>' : '';
-    return linkStart +
-      '<div class="service-card fade-in stagger-' + (i + 1) + '" data-service="' + s.name + '">' +
+    return '<a href="' + (s.url || 'javascript:void(0)') + '" ' + (s.url ? 'target="_blank"' : '') + ' class="service-card fade-in stagger-' + (i + 1) + '" data-service="' + s.name + '">' +
         '<div class="service-header">' +
           '<span class="service-icon">' + s.icon + '</span>' +
-          '<span class="dot ' + s.state + '" style="margin-left:auto;"></span>' +
+          '<span class="dot ' + s.state + '"></span>' +
         '</div>' +
         '<div class="service-name">' + s.label + '</div>' +
         '<div class="service-desc">' + s.desc +
           (s.port ? ' · :' + s.port : '') +
           (s.url ? ' →' : '') +
         '</div>' +
-      '</div>' + linkEnd;
+      '</a>';
   }).join('');
 }
 
 async function renderOverview(el) {
   // Only show loading if the view is empty
-  if (!el.innerHTML || el.innerHTML.includes('empty')) {
-    el.innerHTML = '<div class="loading" style="padding:40px;text-align:center;opacity:0.5;">Initializing DAMP...</div>';
+  if (!el.innerHTML || el.innerHTML.includes('loading') || el.innerHTML.includes('empty')) {
+    el.innerHTML = '<div class="loading-box">Initializing DAMP...</div>';
   }
 
   try {
@@ -69,26 +66,28 @@ async function renderOverview(el) {
     var allDbs = mysqlDbs.concat(pgDbs);
     var services = getServiceInfo(allContainers);
 
-    // Build the new HTML in memory first to avoid partial renders
-    var newHTML =
-      '<div class="grid-3 fade-in" style="margin-bottom: 20px;">' +
-        '<div class="stat-mini">' +
-          '<div class="stat-mini-value">' + running + '</div>' +
-          '<div class="stat-mini-label">' + t('containersRunning') + '</div>' +
-        '</div>' +
-        '<div class="stat-mini">' +
-          '<div class="stat-mini-value">' + projects.length + '</div>' +
-          '<div class="stat-mini-label">' + t('projects') + '</div>' +
-        '</div>' +
-        '<div class="stat-mini">' +
-          '<div class="stat-mini-value">' + allDbs.length + '</div>' +
-          '<div class="stat-mini-label">' + t('databases') + '</div>' +
-        '</div>' +
+    // If we already have the structure, update only what's needed
+    if (el.querySelector('.service-grid')) {
+      updateOverviewStats(el, running, projects.length, allDbs.length);
+      el.querySelector('.service-grid').innerHTML = renderServiceGrid(services);
+      el.querySelector('#container-list').innerHTML = renderContainerRows(projects);
+      el.querySelector('.db-grid').innerHTML = allDbs.map(function(db) {
+        return '<div class="db-card"><span>' + db + '</span></div>';
+      }).join('');
+      return;
+    }
+
+    // Full render for the first time
+    el.innerHTML =
+      '<div class="grid-3 fade-in mb-20">' +
+        renderStatMini(running, t('containersRunning'), 'running-stat') +
+        renderStatMini(projects.length, t('projects'), 'projects-stat') +
+        renderStatMini(allDbs.length, t('databases'), 'dbs-stat') +
       '</div>' +
 
-      '<div class="card fade-in" style="padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.01);">' +
-        '<div class="card-header" style="margin-bottom: 12px;">' +
-          '<span class="card-title" style="font-size: 10px; opacity: 0.5;">' + t('services') + '</span>' +
+      '<div class="card fade-in p-16 rounded-16 bg-subtle">' +
+        '<div class="card-header mb-12">' +
+          '<span class="card-title font-10 opacity-50">' + t('services') + '</span>' +
           '<div class="container-actions">' +
             '<button class="btn btn-sm btn-primary" id="btn-engine-up" onclick="engineAction(\'up\')">▶ ' + t('start') + '</button>' +
             '<button class="btn btn-sm btn-danger" id="btn-engine-down" onclick="engineAction(\'down\')">■ ' + t('stop') + '</button>' +
@@ -102,29 +101,49 @@ async function renderOverview(el) {
       '<div class="grid-2">' +
         '<div class="card fade-in">' +
           '<div class="card-header">' +
-            '<span class="card-title" style="font-size: 10px; opacity: 0.5;">' + t('projects') + '</span>' +
-            '<span class="card-count">' + projects.length + '</span>' +
+            '<span class="card-title font-10 opacity-50">' + t('projects') + '</span>' +
+            '<span class="card-count projects-count">' + projects.length + '</span>' +
           '</div>' +
           '<div id="container-list">' + renderContainerRows(projects) + '</div>' +
         '</div>' +
 
         '<div class="card fade-in">' +
           '<div class="card-header">' +
-            '<span class="card-title" style="font-size: 10px; opacity: 0.5;">' + t('databases') + '</span>' +
-            '<span class="card-count">' + allDbs.length + '</span>' +
+            '<span class="card-title font-10 opacity-50">' + t('databases') + '</span>' +
+            '<span class="card-count dbs-count">' + allDbs.length + '</span>' +
           '</div>' +
-          '<div class="db-grid" style="padding: 4px 0;">' +
+          '<div class="db-grid">' +
             allDbs.map(function(db) {
               return '<div class="db-card"><span>' + db + '</span></div>';
             }).join('') +
           '</div>' +
         '</div>' +
       '</div>';
-      
-    el.innerHTML = newHTML;
   } catch (e) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">' + t('cannotConnect') + '</div></div>';
   }
+}
+
+function renderStatMini(value, label, className) {
+  return '<div class="stat-mini ' + className + '">' +
+    '<div class="stat-mini-value">' + value + '</div>' +
+    '<div class="stat-mini-label">' + label + '</div>' +
+  '</div>';
+}
+
+function updateOverviewStats(el, running, projects, dbs) {
+  var runningEl = el.querySelector('.running-stat .stat-mini-value');
+  var projectsEl = el.querySelector('.projects-stat .stat-mini-value');
+  var dbsEl = el.querySelector('.dbs-stat .stat-mini-value');
+  
+  if (runningEl) runningEl.textContent = running;
+  if (projectsEl) projectsEl.textContent = projects;
+  if (dbsEl) dbsEl.textContent = dbs;
+  
+  var projectsCount = el.querySelector('.projects-count');
+  var dbsCount = el.querySelector('.dbs-count');
+  if (projectsCount) projectsCount.textContent = projects;
+  if (dbsCount) dbsCount.textContent = dbs;
 }
 
 async function engineAction(action) {

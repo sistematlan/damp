@@ -3,7 +3,11 @@
 var logSource = null;
 
 async function renderLogs(el) {
-  if (logSource) { logSource.close(); logSource = null; }
+  // Explicitly close any existing source when rendering the view (F9)
+  if (logSource) {
+    logSource.close();
+    logSource = null;
+  }
 
   var data = await api('/api/status');
   var allContainers = data.containers || [];
@@ -26,28 +30,52 @@ async function renderLogs(el) {
 
 function switchLogContainer() {
   var name = document.getElementById('log-container').value;
-  if (!name) return;
+  if (!name) {
+    if (logSource) {
+      logSource.close();
+      logSource = null;
+    }
+    return;
+  }
 
-  if (logSource) { logSource.close(); logSource = null; }
+  // Ensure previous source is closed before starting a new one (F9)
+  if (logSource) {
+    logSource.close();
+    logSource = null;
+  }
 
   var output = document.getElementById('log-output');
   output.textContent = t('connecting') + ' ' + name + '...\n';
 
-  logSource = new EventSource('/api/containers/' + name + '/logs');
-  logSource.onmessage = function(event) {
-    var checkbox = document.getElementById('log-autoscroll');
-    var isAtBottom = output.scrollHeight - output.clientHeight <= output.scrollTop + 50;
-
-    output.textContent += event.data + '\n';
+  function connect() {
+    if (logSource) logSource.close();
     
-    if (checkbox && checkbox.checked && isAtBottom) {
-      output.scrollTop = output.scrollHeight;
-    }
-  };
-  logSource.onerror = function() {
-    output.innerHTML += '<div style="color:var(--red);margin-top:10px;">' + t('connectionLost') + '</div>';
-    logSource.close();
-  };
+    logSource = new EventSource('/api/containers/' + name + '/logs');
+    
+    logSource.addEventListener('log-line', function(event) {
+      var checkbox = document.getElementById('log-autoscroll');
+      var isAtBottom = output.scrollHeight - output.clientHeight <= output.scrollTop + 50;
+
+      output.textContent += event.data + '\n';
+      
+      if (checkbox && checkbox.checked && isAtBottom) {
+        output.scrollTop = output.scrollHeight;
+      }
+    });
+
+    logSource.addEventListener('error', function(event) {
+      output.innerHTML += '<div style="color:var(--red);margin-top:10px;">' + t('error') + ': ' + event.data + '</div>';
+    });
+
+    logSource.onerror = function() {
+      if (logSource.readyState === EventSource.CLOSED) {
+        output.innerHTML += '<div style="color:var(--yellow);margin-top:10px;">' + t('connectionLost') + '. ' + t('reconnecting') + '...</div>';
+        setTimeout(connect, 3000);
+      }
+    };
+  }
+
+  connect();
 }
 
 function clearLogs() {

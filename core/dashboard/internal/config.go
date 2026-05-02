@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -19,6 +21,7 @@ var validName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
 type ConfigClient struct {
 	dampDir string
+	mu      sync.RWMutex
 }
 
 type TemplateInfo struct {
@@ -37,6 +40,9 @@ type ProjectInfo struct {
 }
 
 func (c *ConfigClient) ListProjects() ([]ProjectInfo, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	home, _ := os.UserHomeDir()
 	registryPath := filepath.Join(home, ".damp", "projects.json")
 
@@ -56,19 +62,6 @@ func (c *ConfigClient) ListProjects() ([]ProjectInfo, error) {
 	return projects, nil
 }
 
-func HandleProjects(w http.ResponseWriter, r *http.Request, cc *ConfigClient) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	projects, err := cc.ListProjects()
-	if err != nil {
-		jsonError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	jsonResponse(w, projects)
-}
-
 func (c *ConfigClient) ListTemplates() ([]TemplateInfo, error) {
 	dir := filepath.Join(c.dampDir, "templates")
 	entries, err := os.ReadDir(dir)
@@ -76,24 +69,20 @@ func (c *ConfigClient) ListTemplates() ([]TemplateInfo, error) {
 		return nil, err
 	}
 
-	descriptions := map[string]string{
-		"frankenphp":  "PHP 8.4 + FrankenPHP (Laravel, CI4, Symfony)",
-		"php-fpm":     "PHP 8.4 + Nginx + FPM (classic)",
-		"php-legacy":  "PHP 7.4 + Nginx + FPM (CI3, Laravel 8)",
-		"php-ancient": "PHP 5.6 + Apache (legacy rescue)",
-		"node":        "Node.js 22 (React, Vue, Astro, Express)",
-		"wordpress":   "WordPress (official image)",
-	}
-
 	var templates []TemplateInfo
 	for _, entry := range entries {
 		if entry.IsDir() {
-			desc := descriptions[entry.Name()]
-			if desc == "" {
-				desc = entry.Name()
+			name := entry.Name()
+			desc := name
+			
+			// Try to read description from description.txt (B26)
+			descPath := filepath.Join(dir, name, "description.txt")
+			if data, err := os.ReadFile(descPath); err == nil {
+				desc = strings.TrimSpace(string(data))
 			}
+
 			templates = append(templates, TemplateInfo{
-				Name:        entry.Name(),
+				Name:        name,
 				Description: desc,
 			})
 		}
@@ -195,8 +184,9 @@ type CreateProjectRequest struct {
 // ── Project registry (persists project paths) ────────────
 
 type ProjectEntry struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
+	Name             string `json:"name"`
+	Path             string `json:"path"`
+	LastStartRequest string `json:"last_start_request,omitempty"`
 }
 
 func (c *ConfigClient) registryPath() string {
@@ -209,11 +199,11 @@ func (c *ConfigClient) loadRegistry() ([]ProjectEntry, error) {
 		if os.IsNotExist(err) {
 			return []ProjectEntry{}, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("read registry: %w", err)
 	}
 	var entries []ProjectEntry
 	if err := json.Unmarshal(data, &entries); err != nil {
-		return []ProjectEntry{}, nil
+		return nil, fmt.Errorf("decode registry: %w (check for corruption in %s)", err, c.registryPath())
 	}
 	return entries, nil
 }
@@ -221,40 +211,76 @@ func (c *ConfigClient) loadRegistry() ([]ProjectEntry, error) {
 func (c *ConfigClient) saveRegistry(entries []ProjectEntry) error {
 	data, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("encode registry: %w", err)
 	}
 	return os.WriteFile(c.registryPath(), data, 0644)
 }
 
-func (c *ConfigClient) RegisterProject(name, path string) {
-	entries, _ := c.loadRegistry()
-	// Update if exists, append if new
+func (c *ConfigClient) RegisterProject(name, path string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	entries, err := c.loadRegistry()
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
 	found := false
 	for i, e := range entries {
 		if e.Name == name {
 			entries[i].Path = path
+			entries[i].LastStartRequest = now
 			found = true
 			break
 		}
 	}
 	if !found {
-		entries = append(entries, ProjectEntry{Name: name, Path: path})
+		entries = append(entries, ProjectEntry{Name: name, Path: path, LastStartRequest: now})
 	}
-	c.saveRegistry(entries)
+	return c.saveRegistry(entries)
 }
 
-func (c *ConfigClient) UnregisterProject(name string) {
-	entries, _ := c.loadRegistry()
+func (c *ConfigClient) RecordStartRequest(name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	entries, err := c.loadRegistry()
+	if err != nil {
+		return err
+	}
+
+	for i, e := range entries {
+		if e.Name == name {
+			entries[i].LastStartRequest = time.Now().UTC().Format(time.RFC3339)
+			return c.saveRegistry(entries)
+		}
+	}
+	return nil
+}
+
+func (c *ConfigClient) UnregisterProject(name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	entries, err := c.loadRegistry()
+	if err != nil {
+		return err
+	}
+
 	var filtered []ProjectEntry
 	for _, e := range entries {
 		if e.Name != name {
 			filtered = append(filtered, e)
 		}
 	}
-	c.saveRegistry(filtered)
+	return c.saveRegistry(filtered)
 }
 
 func (c *ConfigClient) GetProjectPath(name string) string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	entries, _ := c.loadRegistry()
 	for _, e := range entries {
 		if e.Name == name {
@@ -321,10 +347,17 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 	output := fmt.Sprintf("Project '%s' registered. Run: damp new %s %s", name, template, name)
 
 	if projectPath != "" {
-		// Ensure absolute path
+		// Ensure absolute path and clean it (B14)
+		projectPath = filepath.Clean(projectPath)
 		if !filepath.IsAbs(projectPath) {
 			return nil, fmt.Errorf("path must be absolute (e.g. %s/projects/%s)", hostHome(), name)
 		}
+		
+		// Resolve symlinks to prevent escaping (B14)
+		if evalPath, err := filepath.EvalSymlinks(projectPath); err == nil {
+			projectPath = evalPath
+		}
+
 		os.MkdirAll(projectPath, 0755)
 
 		// Copy template files, backing up existing conflicts
@@ -363,9 +396,9 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 			composeCmd.Dir = projectPath
 			composeOut, err := composeCmd.CombinedOutput()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Project %s failed to start: %s\nOutput: %s\n", name, err, string(composeOut))
+				log.Printf("Project %s failed to start: %v\nOutput: %s", name, err, string(composeOut))
 			} else {
-				fmt.Fprintf(os.Stderr, "Project %s started successfully\n", name)
+				log.Printf("Project %s started successfully", name)
 			}
 		}()
 		
@@ -373,7 +406,9 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 		output = fmt.Sprintf("Project '%s' is starting at https://%s. Wait 30 seconds then click the domain link or refresh the page.", name, domain)
 	}
 
-	c.RegisterProject(name, projectPath)
+	if err := c.RegisterProject(name, projectPath); err != nil {
+		return nil, fmt.Errorf("failed to register project: %w", err)
+	}
 
 	return &CreateProjectResponse{
 		Status:   status,
@@ -420,6 +455,8 @@ type ProjectStatus struct {
 	Domain   string `json:"domain"`
 	Template string `json:"template"`
 	Status   string `json:"status"`
+	Path     string `json:"path,omitempty"`
+	Health   string `json:"health"` // "ok", "broken_path", "missing_compose", "unlinked"
 }
 
 func (c *ConfigClient) ListProjectsFromCaddy(dc *DockerClient) ([]ProjectStatus, error) {
@@ -432,15 +469,15 @@ func (c *ConfigClient) ListProjectsFromCaddy(dc *DockerClient) ([]ProjectStatus,
 		return nil, err
 	}
 
-	// Get ALL containers (including stopped) for status check
-	// key: container name, value: state (running, exited, etc.)
-	allContainers := make(map[string]string)
-	if dc != nil {
-		data, _ := dc.GetAllContainers()
-		for _, c := range data {
-			allContainers[c.Name] = c.State
-		}
+	// Load registry
+	registry, _ := c.loadRegistry()
+	registryMap := make(map[string]ProjectEntry)
+	for _, e := range registry {
+		registryMap[e.Name] = e
 	}
+
+	// Get ALL containers (including stopped) for status check
+	containers, _ := dc.GetAllContainers()
 
 	var projects []ProjectStatus
 	for _, entry := range entries {
@@ -450,15 +487,64 @@ func (c *ConfigClient) ListProjectsFromCaddy(dc *DockerClient) ([]ProjectStatus,
 		}
 		projectName := strings.TrimSuffix(name, ".caddy")
 
-		// Check containers with this prefix
-		status := "created" // config exists but no containers
-		for containerName, state := range allContainers {
-			if strings.HasPrefix(containerName, projectName+"-") {
-				if state == "running" {
-					status = "running"
-					break
+		health := "ok"
+		projectPath := ""
+		
+		// Check Registry link
+		if reg, ok := registryMap[projectName]; ok {
+			projectPath = reg.Path
+			if projectPath != "" {
+				if info, err := os.Stat(projectPath); err != nil || !info.IsDir() {
+					health = "broken_path"
+				} else {
+					composePath := filepath.Join(projectPath, "docker-compose.yml")
+					if _, err := os.Stat(composePath); err != nil {
+						health = "missing_compose"
+					}
 				}
-				status = "stopped" // container exists but not running
+			} else {
+				health = "unlinked"
+			}
+		} else {
+			health = "unlinked"
+		}
+
+		status := "created"
+		hasContainers := false
+		detectedPath := ""
+
+	containerLoop:
+		for _, c := range containers {
+			if c.Name == projectName || strings.HasPrefix(c.Name, projectName+"-") {
+				hasContainers = true
+				if c.HostPath != "" { detectedPath = c.HostPath }
+
+				switch c.State {
+				case "running":
+					status = "running"
+					break containerLoop
+				case "created", "restarting":
+					if status != "running" { status = "starting" }
+				default:
+					if status != "running" { status = "stopped" }
+				}
+			}
+		}
+
+		// Smart Link: If unlinked but we found where it lives, link it!
+		if projectPath == "" && detectedPath != "" {
+			log.Printf("SmartLink: Auto-linking project %s to %s", projectName, detectedPath)
+			c.RegisterProject(projectName, detectedPath)
+			projectPath = detectedPath
+			health = "ok"
+		}
+
+		if !hasContainers && health == "ok" {
+			if reg, ok := registryMap[projectName]; ok && reg.LastStartRequest != "" {
+				t, parseErr := time.Parse(time.RFC3339, reg.LastStartRequest)
+				if parseErr == nil && time.Since(t) < 60*time.Second {
+					status = "starting"
+				}
 			}
 		}
 
@@ -466,6 +552,8 @@ func (c *ConfigClient) ListProjectsFromCaddy(dc *DockerClient) ([]ProjectStatus,
 			Name:   projectName,
 			Domain: projectName + "." + dampTLD(),
 			Status: status,
+			Path:   projectPath,
+			Health: health,
 		})
 	}
 	return projects, nil
@@ -475,16 +563,21 @@ func (c *ConfigClient) ListProjectsFromCaddy(dc *DockerClient) ([]ProjectStatus,
 
 func (c *ConfigClient) DeleteProject(name string, dc *DockerClient, dbClient *DatabaseClient) (string, error) {
 	dumpPath := ""
+	var lastErr error
 	
 	// 1. Stop containers
 	if dc != nil {
 		ctx := context.Background()
-		dc.ProjectAction(ctx, name, "stop")
+		if _, err := dc.ProjectAction(ctx, name, "stop"); err != nil {
+			lastErr = fmt.Errorf("stop containers: %w", err)
+		}
 	}
 
 	// 2. Remove Caddy config
 	caddyPath := filepath.Join(c.dampDir, "caddy", "projects.d", name+".caddy")
-	os.Remove(caddyPath)
+	if err := os.Remove(caddyPath); err != nil && !os.IsNotExist(err) {
+		lastErr = fmt.Errorf("remove caddy config: %w", err)
+	}
 
 	// 3. Backup database before dropping
 	dbName := strings.ReplaceAll(name, "-", "_") + "_db"
@@ -513,18 +606,24 @@ func (c *ConfigClient) DeleteProject(name string, dc *DockerClient, dbClient *Da
 		}
 	}
 
-	// 4. Drop database (best effort)
+	// 4. Drop database (best effort but log errors)
 	if dbClient != nil {
-		dbClient.DropDatabase(dbName)
+		if err := dbClient.DropDatabase(dbName); err != nil {
+			lastErr = fmt.Errorf("drop database: %w", err)
+		}
 	}
 
 	// 5. Unregister
-	c.UnregisterProject(name)
+	if err := c.UnregisterProject(name); err != nil {
+		lastErr = fmt.Errorf("unregister project: %w", err)
+	}
 
 	// 6. Reload Caddy via admin API
-	reloadCaddy(c.dampDir) // best-effort: project config file is already deleted
+	if err := reloadCaddy(c.dampDir); err != nil {
+		lastErr = fmt.Errorf("caddy reload: %w", err)
+	}
 
-	return dumpPath, nil
+	return dumpPath, lastErr
 }
 
 func HandleDeleteProject(w http.ResponseWriter, r *http.Request, cc *ConfigClient, dc *DockerClient, dbClient *DatabaseClient) {
@@ -597,15 +696,21 @@ func reloadCaddy(dampDir string) error {
 
 // addHostEntry appends "127.0.0.1  domain" to the hosts file if not already present.
 func addHostEntry(domain string) {
+	// Validate domain to prevent shell injection (B16)
+	if !regexp.MustCompile(`^[a-z0-9.-]+$`).MatchString(domain) {
+		return
+	}
+
 	if runtime.GOOS == "windows" {
-		// Use PowerShell to add entry to Windows hosts file
-		checkCmd := fmt.Sprintf("Get-Content C:\\Windows\\System32\\drivers\\etc\\hosts | Select-String -Pattern '127.0.0.1\\s+%s'", domain)
-		if err := exec.Command("powershell", "-NoProfile", "-Command", checkCmd).Run(); err != nil {
-			// Not found, add it (requires admin if not running as admin, but we'll try)
-			addCmd := fmt.Sprintf("Add-Content -Path C:\\Windows\\System32\\drivers\\etc\\hosts -Value \"`n127.0.0.1 %s\" -ErrorAction SilentlyContinue", domain)
-			// Try running directly first
-			_ = exec.Command("powershell", "-NoProfile", "-Command", addCmd).Run()
-		}
+		// Use PowerShell with arguments instead of string interpolation to prevent injection (B16)
+		entry := "127.0.0.1 " + domain
+		script := fmt.Sprintf(`
+			$path = "C:\Windows\System32\drivers\etc\hosts"
+			if (!(Get-Content $path | Select-String -Pattern "%s")) {
+				Add-Content -Path $path -Value "` + "`n" + `%s" -ErrorAction SilentlyContinue
+			}
+		`, regexp.QuoteMeta(domain), entry)
+		_ = exec.Command("powershell", "-NoProfile", "-Command", script).Run()
 		return
 	}
 
@@ -678,6 +783,13 @@ func HandleBrowse(w http.ResponseWriter, r *http.Request) {
 	// Allowed base paths
 	homeParent := filepath.Dir(home)
 	cleanPath := filepath.Clean(dirPath)
+	
+	// Resolve symlinks to detect hidden traversals (B15)
+	resolvedPath, err := filepath.EvalSymlinks(cleanPath)
+	if err == nil {
+		cleanPath = resolvedPath
+	}
+
 	allowed := cleanPath == "/" ||
 		strings.HasPrefix(cleanPath, homeParent) ||
 		strings.HasPrefix(cleanPath, "/mnt") ||

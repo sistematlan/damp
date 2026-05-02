@@ -35,7 +35,8 @@ function connectSSE() {
   if (sseConnection) sseConnection.close();
 
   sseConnection = new EventSource('/api/events');
-  sseConnection.onmessage = (event) => {
+  
+  sseConnection.addEventListener('container-status', (event) => {
     try {
       containers = JSON.parse(event.data) || [];
       updateStatusBar();
@@ -44,9 +45,18 @@ function connectSSE() {
         const el = document.getElementById('container-list');
         if (el) el.innerHTML = renderContainerRows(containers);
       }
-    } catch (e) {}
-  };
+    } catch (e) {
+      console.error('SSE JSON parse error:', e);
+    }
+  });
+
+  sseConnection.addEventListener('error', (event) => {
+    console.error('SSE Error event:', event.data);
+  });
+
   sseConnection.onerror = () => {
+    sseConnection.close();
+    // Reconnect with fixed 5s delay (P2 fix: F20 exponential backoff could be added later)
     setTimeout(connectSSE, 5000);
   };
 }
@@ -54,6 +64,7 @@ function connectSSE() {
 function updateStatusBar() {
   var running = containers.filter(function(c) { return c.state === 'running'; }).length;
   var indicator = document.getElementById('status-indicator');
+  if (!indicator) return;
   var dot = indicator.querySelector('.dot');
   dot.className = 'dot ' + (running > 0 ? 'running' : 'stopped');
   document.getElementById('container-count').textContent = running + ' ' + t('containers');
@@ -62,7 +73,7 @@ function updateStatusBar() {
 // ── Shared render helpers ──────────────────────────────
 function renderContainerRows(list) {
   if (!list || list.length === 0) {
-    return '<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No containers</div></div>';
+    return '<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">' + t('no_containers') + '</div></div>';
   }
   return list.map(function(c, i) {
     return '<div class="container-row fade-in stagger-' + (i + 1) + '" data-container="' + c.name + '" onclick="containerAction(\'' + c.name + '\', \'' + (c.state === 'running' ? 'stop' : 'start') + '\')">' +
@@ -70,18 +81,22 @@ function renderContainerRows(list) {
         '<span class="dot ' + c.state + '" data-status="' + c.state + '"></span>' +
         '<div>' +
           '<div class="container-name">' + c.name + '</div>' +
-          '<div class="container-meta">' + (c.state === 'running' ? '● Activo' : '○ Detenido') + '</div>' +
+          '<div class="container-meta">' + (c.state === 'running' ? '● ' + t('active') : '○ ' + t('stopped')) + '</div>' +
         '</div>' +
         (c.is_damp ? '<span class="badge badge-damp">DAMP</span>' : '') +
       '</div>' +
-      '<span class="badge badge-' + c.state + '">' + c.state + '</span>' +
+      '<span class="badge badge-' + c.state + '">' + t(c.state) + '</span>' +
     '</div>';
   }).join('');
 }
 
 async function containerAction(name, action) {
   try {
-    await fetch('/api/containers/' + name + '/' + action, { method: 'POST' });
+    const res = await fetch('/api/containers/' + name + '/' + action, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json();
+      console.error('Container action failed:', err.error);
+    }
   } catch (e) {
     console.error(e);
   }
@@ -89,6 +104,14 @@ async function containerAction(name, action) {
 
 async function api(url, opts) {
   const res = await fetch(url, opts);
+  if (!res.ok) {
+    let msg = 'API error';
+    try {
+      const err = await res.json();
+      msg = err.error || msg;
+    } catch (e) {}
+    throw new Error(msg);
+  }
   return res.json();
 }
 

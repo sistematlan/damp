@@ -9,44 +9,44 @@
 </head>
 <body>
   <div class="app">
-    <nav class="sidebar">
+    <nav class="sidebar" role="navigation" aria-label="Main Navigation">
       <div class="sidebar-brand">
-        <img src="/favicon.png" alt="DAMP" style="width:28px;height:28px;margin-right:10px;border-radius:6px;">
+        <img src="/favicon.png" alt="DAMP Logo" style="width:28px;height:28px;margin-right:10px;border-radius:6px;">
         DAMP
       </div>
-      <a href="#/" class="nav-item active" data-view="overview">
-        <span class="nav-icon">◉</span> Overview
+      <a href="#/" class="nav-item active" data-view="overview" aria-current="page">
+        <span class="nav-icon" aria-hidden="true">◉</span> Overview
       </a>
       <a href="#/projects" class="nav-item" data-view="projects">
-        <span class="nav-icon">⚙</span> Projects
+        <span class="nav-icon" aria-hidden="true">⚙</span> Projects
       </a>
       <a href="#/databases" class="nav-item" data-view="databases">
-        <span class="nav-icon">☰</span> Databases
+        <span class="nav-icon" aria-hidden="true">☰</span> Databases
       </a>
       <a href="#/logs" class="nav-item" data-view="logs">
-        <span class="nav-icon">☷</span> Logs
+        <span class="nav-icon" aria-hidden="true">☷</span> Logs
       </a>
       <div class="sidebar-footer">
-        <div class="sidebar-links">
+        <div class="sidebar-links" role="group" aria-label="External Links">
           <a href="https://pma.test" target="_blank" class="sidebar-link">PHPMyAdmin</a>
           <a href="https://mail.test" target="_blank" class="sidebar-link">Mailpit</a>
         </div>
-        <div class="lang-toggle">
-          <button class="lang-btn active" data-lang="en" onclick="setLang('en')">EN</button>
-          <button class="lang-btn" data-lang="es" onclick="setLang('es')">ES</button>
+        <div class="lang-toggle" role="group" aria-label="Language Selector">
+          <button class="lang-btn active" data-lang="en" onclick="setLang('en')" aria-pressed="true">EN</button>
+          <button class="lang-btn" data-lang="es" onclick="setLang('es')" aria-pressed="false">ES</button>
         </div>
         <div class="sidebar-version">DAMP v0.5.0</div>
       </div>
     </nav>
 
-    <main>
-      <div class="topbar">
-        <div class="topbar-title" id="page-title">Overview</div>
-        <div class="topbar-status" id="status-indicator">
-          <span class="dot running"></span>
+    <main role="main">
+      <header class="topbar">
+        <h1 class="topbar-title" id="page-title">Overview</h1>
+        <div class="topbar-status" id="status-indicator" aria-live="polite">
+          <span class="dot running" aria-hidden="true"></span>
           <span id="container-count">0 containers</span>
         </div>
-      </div>
+      </header>
       <div class="content" id="view"></div>
     </main>
   </div>

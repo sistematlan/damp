@@ -1,13 +1,19 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"runtime/debug"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/sistematlan/damp/dashboard/internal"
 )
@@ -15,10 +21,70 @@ import (
 //go:embed web/*
 var webFS embed.FS
 
+func recoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Printf("[PANIC ERROR] %v\nStack: %s", err, debug.Stack())
+				if r.Header.Get("Accept") == "text/event-stream" {
+					fmt.Fprintf(w, "event: error\ndata: Internal server error\n\n")
+					return
+				}
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *statusWriter) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(sw, r)
+		log.Printf("%s %s %d %v", r.Method, r.URL.Path, sw.status, time.Since(start))
+	})
+}
+
 func main() {
 	port := os.Getenv("DASHBOARD_PORT")
 	if port == "" {
 		port = "9000"
+	}
+
+	dbPass := os.Getenv("DB_ROOT_PASSWORD")
+	if dbPass == "" {
+		log.Fatal("DB_ROOT_PASSWORD environment variable is required")
 	}
 
 	dockerClient, err := internal.NewDockerClient()
@@ -29,10 +95,6 @@ func main() {
 	dbHost := os.Getenv("DB_HOST")
 	if dbHost == "" {
 		dbHost = "damp-db"
-	}
-	dbPass := os.Getenv("DB_ROOT_PASSWORD")
-	if dbPass == "" {
-		dbPass = "root"
 	}
 	dbClient := internal.NewDatabaseClient(dbHost, dbPass)
 
@@ -99,7 +161,6 @@ func main() {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		json.NewEncoder(w).Encode(projects)
 	})
 	mux.HandleFunc("/api/projects/", func(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +168,7 @@ func main() {
 			internal.HandleDeleteProject(w, r, configClient, dockerClient, dbClient)
 			return
 		}
-		internal.HandleProjectAction(w, r, dockerClient)
+		internal.HandleProjectAction(w, r, dockerClient, configClient)
 	})
 	mux.HandleFunc("/api/engine/", func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleEngine(w, r, configClient)
@@ -127,6 +188,37 @@ func main() {
 		fileServer.ServeHTTP(w, r)
 	})
 
-	log.Printf("DAMP Dashboard running on http://0.0.0.0:%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
+	// Apply middleware
+	handler := loggingMiddleware(corsMiddleware(recoveryMiddleware(mux)))
+
+	server := &http.Server{
+		Addr:         ":" + port,
+		Handler:      handler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Graceful shutdown setup
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("DAMP Dashboard running on http://0.0.0.0:%s", port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Could not listen on %s: %v\n", port, err)
+		}
+	}()
+
+	<-stop
+	log.Println("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	log.Println("Server gracefully stopped")
 }

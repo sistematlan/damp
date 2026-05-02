@@ -41,6 +41,12 @@ const translations = {
     scaffoldFiles: 'Scaffold files',
     creatingDbCaddy: 'Creating database and Caddy config...',
     failedCreate: 'Failed to create project',
+    repair: 'Repair',
+    relinkFolder: 'Relink Folder',
+    missingCompose: 'Missing docker-compose.yml',
+    folderNotFound: 'Folder not found',
+    unlinked: 'Unlinked',
+    fixProject: 'Fix Project',
 
     // Databases
     mysqlDatabases: 'MySQL Databases',
@@ -57,12 +63,25 @@ const translations = {
     selectContainerHint: 'Select a container to view logs...',
     connecting: 'Connecting to',
     connectionLost: '[Connection lost. Reconnecting...]',
+    reconnecting: 'Reconnecting',
 
     // Shared
     containers: 'containers',
     cannotConnect: 'Cannot connect to DAMP API',
     cannotLoad: 'Cannot load',
     error: 'Error',
+    active: 'Active',
+    stopped: 'Stopped',
+    running: 'Running',
+    no_containers: 'No containers found',
+    cancel: 'Cancel',
+    select_folder: 'Select Folder',
+    select_this_folder: 'Select this folder',
+    please_select_folder: 'Please select a folder first',
+    empty_directory: 'Empty directory',
+    project_preview: 'Project Preview',
+    domain: 'Domain',
+    database: 'Database',
   },
   es: {
     // Nav
@@ -104,6 +123,12 @@ const translations = {
     scaffoldFiles: 'Copiar archivos',
     creatingDbCaddy: 'Creando base de datos y config de Caddy...',
     failedCreate: 'Error al crear proyecto',
+    repair: 'Reparar',
+    relinkFolder: 'Vincular carpeta',
+    missingCompose: 'Falta docker-compose.yml',
+    folderNotFound: 'Carpeta no encontrada',
+    unlinked: 'Sin vínculo',
+    fixProject: 'Arreglar Proyecto',
 
     // Databases
     mysqlDatabases: 'Bases MySQL',
@@ -120,12 +145,25 @@ const translations = {
     selectContainerHint: 'Selecciona un contenedor para ver logs...',
     connecting: 'Conectando a',
     connectionLost: '[Conexión perdida. Reconectando...]',
+    reconnecting: 'Reconectando',
 
     // Shared
     containers: 'contenedores',
     cannotConnect: 'No se puede conectar a la API de DAMP',
     cannotLoad: 'No se puede cargar',
     error: 'Error',
+    active: 'Activo',
+    stopped: 'Detenido',
+    running: 'Activo',
+    no_containers: 'No se encontraron contenedores',
+    cancel: 'Cancelar',
+    select_folder: 'Seleccionar Carpeta',
+    select_this_folder: 'Seleccionar esta carpeta',
+    please_select_folder: 'Por favor selecciona una carpeta primero',
+    empty_directory: 'Directorio vacío',
+    project_preview: 'Vista previa del proyecto',
+    domain: 'Dominio',
+    database: 'Base de datos',
   }
 };
 
@@ -138,15 +176,21 @@ function t(key) {
 function setLang(lang) {
   currentLang = lang;
   localStorage.setItem('damp-lang', lang);
+  document.documentElement.lang = lang; // (F12)
+
   // Update nav labels
-  document.querySelector('[data-view="overview"]').innerHTML = '<span class="nav-icon">&#9673;</span> ' + t('overview');
-  document.querySelector('[data-view="projects"]').innerHTML = '<span class="nav-icon">&#9881;</span> ' + t('projects');
-  document.querySelector('[data-view="databases"]').innerHTML = '<span class="nav-icon">&#9707;</span> ' + t('databases');
-  document.querySelector('[data-view="logs"]').innerHTML = '<span class="nav-icon">&#9783;</span> ' + t('logs');
+  document.querySelector('[data-view="overview"]').innerHTML = '<span class="nav-icon" aria-hidden="true">&#9673;</span> ' + t('overview');
+  document.querySelector('[data-view="projects"]').innerHTML = '<span class="nav-icon" aria-hidden="true">&#9881;</span> ' + t('projects');
+  document.querySelector('[data-view="databases"]').innerHTML = '<span class="nav-icon" aria-hidden="true">&#9707;</span> ' + t('databases');
+  document.querySelector('[data-view="logs"]').innerHTML = '<span class="nav-icon" aria-hidden="true">&#9783;</span> ' + t('logs');
+  
   // Update lang toggle
   document.querySelectorAll('.lang-btn').forEach(function(btn) {
-    btn.classList.toggle('active', btn.dataset.lang === lang);
+    var active = btn.dataset.lang === lang;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active);
   });
+  
   // Re-render current view
   var path = location.hash.slice(1) || '/';
   navigate(path);

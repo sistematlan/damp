@@ -122,9 +122,9 @@ func (d *DatabaseClient) DumpDatabase(name string, outputPath string) error {
 	}
 	password := credParts[1]
 
-	// Use docker exec to run mysqldump inside the MySQL container
-	cmd := exec.Command("docker", "exec", "damp-db", "mysqldump", 
-		"-uroot", "-p"+password, 
+	// Use docker exec with environment variable to avoid password in process list (B18)
+	cmd := exec.Command("docker", "exec", "-e", "MYSQL_PWD="+password, "damp-db", "mysqldump", 
+		"-uroot", 
 		"--single-transaction", 
 		"--routines", 
 		"--triggers",
