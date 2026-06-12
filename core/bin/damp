@@ -822,10 +822,20 @@ setup_project() {
   fi
 
   # 2. Generate Caddy config in projects.d/
+  # The upstream must match the real container_name from the project's
+  # docker-compose.yml (templates use "<project>-app"; for php-fpm/php-legacy
+  # the HTTP listener is the nginx "<project>-web", not the PHP container).
+  local upstream=""
+  if [ -f "$target/docker-compose.yml" ]; then
+    upstream=$(grep -E 'container_name:.*-web' "$target/docker-compose.yml" | head -1 | awk '{print $2}')
+    [ -z "$upstream" ] && upstream=$(grep -m1 'container_name:' "$target/docker-compose.yml" | awk '{print $2}')
+  fi
+  [ -z "$upstream" ] && upstream="$project"
+
   mkdir -p "$PROJECTS_DIR"
   cat > "$PROJECTS_DIR/${project}.caddy" <<EOF
 ${domain} {
-    reverse_proxy ${project}:${proxy_port}
+    reverse_proxy ${upstream}:${proxy_port}
 }
 EOF
   echo -e "${DIM}Caddy config created: projects.d/${project}.caddy${NC}"
