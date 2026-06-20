@@ -1,0 +1,79 @@
+# =============================================================
+#  Mutagen project config — sync local code → remote MSI
+# -------------------------------------------------------------
+#  Edit code on the Mac, run the DAMP stack on the MSI.
+#  This file defines real-time, sub-second file sync over SSH.
+#
+#  Usage (from the directory containing this file):
+#      mutagen project start      # start all sync sessions
+#      mutagen project list       # see status / conflicts
+#      mutagen sync monitor       # live monitor
+#      mutagen project terminate  # stop syncing
+#
+#  IMPORTANT — set these before first run:
+#    * Replace MSI_SSH below with your SSH alias/target for the MSI
+#      (the same one used in DAMP_REMOTE_HOST). Using an ssh config
+#      alias (e.g. "msi-damp") is strongly recommended.
+#    * Make sure both paths exist on each side.
+#
+#  Model:
+#    alpha = source of truth for edits (your Mac, two-way-resolved)
+#    beta  = the MSI where containers read the files
+#
+#  We use mode "two-way-resolved" so the Mac wins on conflicts
+#  (you edit there). Generated/heavy dirs are ignored so we never
+#  drag node_modules / vendor / caches across the network.
+# =============================================================
+
+# Define one sync session per project you work on. Add more blocks
+# under `sync:` as needed — each gets its own name.
+sync:
+  defaults:
+    mode: "two-way-resolved"      # Mac (alpha) wins on conflict
+    ignore:
+      vcs: true                    # ignore .git, .svn, etc.
+      paths:
+        # Dependencies (rebuilt inside the container on the MSI)
+        - "node_modules/"
+        - "vendor/"
+        # Build / cache artifacts
+        - "dist/"
+        - "build/"
+        - ".next/"
+        - ".nuxt/"
+        - ".turbo/"
+        - ".cache/"
+        # Framework writable/runtime dirs
+        - "writable/"              # CodeIgniter 4
+        - "storage/framework/"     # Laravel
+        - "bootstrap/cache/"       # Laravel
+        - "var/cache/"             # Symfony
+        - "var/log/"
+        # OS / IDE noise
+        - ".DS_Store"
+        - ".idea/"
+        - "*.swp"
+        # DAMP-generated per-project files live in git anyway;
+        # keep them syncing so the MSI sees your Dampfile/compose.
+    symlink:
+      mode: "posix-raw"
+    watch:
+      mode: "portable"
+      pollingInterval: 2
+    permissions:
+      defaultFileMode: 0644
+      defaultDirectoryMode: 0755
+
+  # ── Example session: edit ~/sourcecode/mancii on the Mac, run on MSI ──
+  # Duplicate/rename this block per project. The MSI path should match
+  # where the project will live on the remote (and what damp-remote uses).
+  #
+  # mancii:
+  #   alpha: "/Users/christianhernandez/sourcecode/mancii"
+  #   beta:  "MSI_SSH:/home/youruser/sourcecode/mancii"
+
+  # ── Active sessions ───────────────────────────────────────────
+  # Fill these in. Replace MSI_SSH and the username/paths.
+  project:
+    alpha: "/Users/christianhernandez/sourcecode/REPLACE_ME"
+    beta:  "MSI_SSH:/home/REPLACE_ME/sourcecode/REPLACE_ME"

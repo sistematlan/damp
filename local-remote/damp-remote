@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# =============================================================
+#  damp-remote — Run DAMP on a remote host over SSH
+# -------------------------------------------------------------
+#  Use case: edit code locally (Mac), run the DAMP stack on a
+#  beefier remote machine (e.g. an MSI box with 32GB RAM running
+#  Debian/WSL2 + Docker Engine). This wrapper forwards any DAMP
+#  command to the remote, so from the Mac you can do:
+#
+#      damp-remote up
+#      damp-remote start my-project
+#      damp-remote status
+#      damp-remote logs caddy
+#
+#  Configuration is read from (in order of precedence):
+#    1. Environment variables (DAMP_REMOTE_*)
+#    2. ~/.config/damp-remote/config
+#
+#  Required settings:
+#    DAMP_REMOTE_HOST   SSH host/alias of the MSI       (e.g. msi-damp)
+#    DAMP_REMOTE_DIR    Path to the damp repo on the MSI (e.g. ~/sourcecode/damp)
+#
+#  Optional settings:
+#    DAMP_REMOTE_USER   SSH user (if not encoded in HOST/ssh config)
+#    DAMP_REMOTE_PORT   SSH port (default: 22)
+#    DAMP_REMOTE_BIN    Path to the damp binary on the MSI
+#                       (default: $DAMP_REMOTE_DIR/core/bin/damp)
+# =============================================================
+set -euo pipefail
+
+GREEN="\033[0;32m"; YELLOW="\033[0;33m"; RED="\033[0;31m"
+BOLD="\033[1m"; DIM="\033[2m"; NC="\033[0m"
+
+CONFIG_FILE="${DAMP_REMOTE_CONFIG:-$HOME/.config/damp-remote/config}"
+
+# ── Load config file if present ────────────────────────────────
+if [ -f "$CONFIG_FILE" ]; then
+  # shellcheck disable=SC1090
+  set -a; source "$CONFIG_FILE"; set +a
+fi
+
+# ── Resolve settings ───────────────────────────────────────────
+REMOTE_HOST="${DAMP_REMOTE_HOST:-}"
+REMOTE_USER="${DAMP_REMOTE_USER:-}"
+REMOTE_PORT="${DAMP_REMOTE_PORT:-22}"
+REMOTE_DIR="${DAMP_REMOTE_DIR:-}"
+REMOTE_BIN="${DAMP_REMOTE_BIN:-}"
+
+usage() {
+  echo -e "${BOLD}damp-remote${NC} — run DAMP on a remote host over SSH
+"
+  echo -e "${BOLD}Usage:${NC}"
+  echo -e "  damp-remote <damp-command> [args...]"
+  echo -e "  damp-remote --check          Verify connectivity and remote setup"
+  echo -e "  damp-remote --shell          Open an interactive shell on the remote
+"
+  echo -e "${BOLD}Examples:${NC}"
+  echo -e "  damp-remote up"
+  echo -e "  damp-remote start my-project"
+  echo -e "  damp-remote status"
+  echo -e "  damp-remote logs caddy"
+  echo -e "  damp-remote import my_db dump.sql   ${DIM}# pipes the local file over SSH${NC}
+"
+  echo -e "${BOLD}Configuration${NC} (${CONFIG_FILE}):"
+  echo -e "  DAMP_REMOTE_HOST=msi-damp           ${DIM}# required (ssh alias or user@host)${NC}"
+  echo -e "  DAMP_REMOTE_DIR=~/sourcecode/damp   ${DIM}# required (damp repo path on MSI)${NC}"
+  echo -e "  DAMP_REMOTE_PORT=22                 ${DIM}# optional${NC}"
+  echo -e "  DAMP_REMOTE_USER=youruser           ${DIM}# optional${NC}"
+}
+
+die() { echo -e "${RED}error:${NC} $*" >&2; exit 1; }
+
+# ── Validate required settings ─────────────────────────────────
+require_config() {
+  [ -n "$REMOTE_HOST" ] || die "DAMP_REMOTE_HOST not set. See: damp-remote --help"
+  [ -n "$REMOTE_DIR" ]  || die "DAMP_REMOTE_DIR not set. See: damp-remote --help"
+  [ -z "$REMOTE_BIN" ] && REMOTE_BIN="$REMOTE_DIR/core/bin/damp"
+}
+
+# ── Build the SSH target + options ─────────────────────────────
+ssh_target() {
+  if [ -n "$REMOTE_USER" ]; then echo "${REMOTE_USER}@${REMOTE_HOST}"; else echo "$REMOTE_HOST"; fi
+}
+
+ssh_opts() {
+  echo "-p ${REMOTE_PORT} -o ConnectTimeout=10"
+}
+
+# ── Connectivity / setup check ─────────────────────────────────
+do_check() {
+  require_config
+  local target; target="$(ssh_target)"
+  echo -e "${DIM}Checking SSH to ${target}:${REMOTE_PORT}...${NC}"
+  # shellcheck disable=SC2046
+  if ! ssh $(ssh_opts) "$target" 'echo ok' >/dev/null 2>&1; then
+    die "cannot SSH to ${target}. Verify host, port, and keys."
+  fi
+  echo -e "${GREEN}✔ SSH OK${NC}"
+
+  echo -e "${DIM}Checking remote damp binary (${REMOTE_BIN})...${NC}"
+  # shellcheck disable=SC2046
+  if ! ssh $(ssh_opts) "$target" "test -x ${REMOTE_BIN}" 2>/dev/null; then
+    die "damp binary not found/executable at ${REMOTE_BIN} on the remote."
+  fi
+  echo -e "${GREEN}✔ damp binary found${NC}"
+
+  echo -e "${DIM}Checking remote Docker...${NC}"
+  # shellcheck disable=SC2046
+  if ! ssh $(ssh_opts) "$target" 'docker ps >/dev/null 2>&1'; then
+    die "docker not reachable on the remote (needs daemon running + user in docker group)."
+  fi
+  echo -e "${GREEN}✔ Docker reachable${NC}"
+
+  echo -e "${GREEN}${BOLD}All checks passed. You can run: damp-remote up${NC}"
+}
+
+# ── Open interactive remote shell ──────────────────────────────
+do_shell() {
+  require_config
+  local target; target="$(ssh_target)"
+  # shellcheck disable=SC2046
+  exec ssh -t $(ssh_opts) "$target" "cd ${REMOTE_DIR} && exec \$SHELL -l"
+}
+
+# ── Main ───────────────────────────────────────────────────────
+case "${1:-}" in
+  ""|-h|--help|help)
+    usage; exit 0 ;;
+  --check)
+    do_check; exit 0 ;;
+  --shell)
+    do_shell ;;
+esac
+
+require_config
+TARGET="$(ssh_target)"
+
+# Special-case: `import <db> <file>` streams a LOCAL sql file to the remote.
+# DAMP's own `import` expects the file to exist on the same host as the DB,
+# so when running remotely we pipe the local file into a remote stdin import.
+if [ "${1:-}" = "import" ] && [ -n "${3:-}" ] && [ -f "${3:-}" ]; then
+  db="$2"; localfile="$3"
+  echo -e "${DIM}Streaming ${localfile} → remote import into '${db}'...${NC}"
+  # Run mysql import on the remote, reading SQL from our stdin.
+  # shellcheck disable=SC2046
+  ssh $(ssh_opts) "$TARGET" \
+    "docker exec -i damp-db sh -c 'exec mysql -uroot -p\"\${DB_ROOT_PASSWORD:-root}\" \"$db\"'" \
+    < "$localfile"
+  echo -e "${GREEN}✔ Imported ${localfile} → ${db} (remote)${NC}"
+  exit 0
+fi
+
+# Generic passthrough: run `damp <args...>` on the remote, from the repo dir.
+# We quote each argument so paths/spaces survive the SSH boundary.
+remote_cmd="cd ${REMOTE_DIR} && ${REMOTE_BIN}"
+for arg in "$@"; do
+  remote_cmd+=" $(printf '%q' "$arg")"
+done
+
+# Allocate a TTY so interactive prompts (drop-db confirmation, init wizard) work.
+# shellcheck disable=SC2046
+exec ssh -t $(ssh_opts) "$TARGET" "$remote_cmd"
