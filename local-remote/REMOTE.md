@@ -326,6 +326,59 @@ Se documentará en detalle cuando lo abordemos.
 
 ---
 
+## Mantener la MSI despierta (que no se duerma)
+
+La MSI corre headless (la editas desde el Mac), así que Windows la considera
+"inactiva" y la suspende/hiberna, matando WSL2, Docker, Tailscale y sshd. WSL2
+mismo está bien (systemd activo: Docker, sshd y tailscaled arrancan solos tras
+un reboot); el problema es **Windows**.
+
+### Windows: no dormir cuando está enchufada
+
+WSL2 con systemd ya levanta los servicios solo; basta evitar que Windows duerma.
+En **PowerShell como Administrador** en la MSI (solo `-ac` = enchufada, para no
+drenar la batería):
+
+```powershell
+powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+powercfg /change monitor-timeout-ac 0
+```
+
+> Resultado: **enchufada** nunca duerme → siempre accesible por Tailscale
+> (`100.x`). **Con batería** se comporta normal (duerme si la dejas sola) para no
+> vaciarla; al despertarla/enchufarla, systemd vuelve a levantar todo.
+
+### WSL2: que no apague la VM por inactividad
+
+En `C:\Users\<usuario>\.wslconfig` (en Windows):
+
+```ini
+[wsl2]
+vmIdleTimeout=-1
+```
+
+Luego, una vez: `wsl --shutdown` en PowerShell y reabre Debian.
+
+### Wake-on-LAN — solo por cable Ethernet (pendiente)
+
+Para despertar la MSI por red tras dormir, WoL **solo es confiable por cable
+Ethernet**. Por **Wi-Fi (WoWLAN)** la mayoría de tarjetas no lo soportan desde
+hibernación/apagado, así que no se documenta aquí todavía. El magic packet debe
+enviarse a la **MAC + IP de la LAN física** (no la IP `100.x` de Tailscale, que
+está muerta mientras la MSI duerme), desde un equipo en la misma red local.
+
+Cuando se conecte por cable, habilitar en PowerShell (Admin) y luego enviar el
+magic packet desde el Mac (`brew install wakeonlan`; `wakeonlan <MAC>`):
+
+```powershell
+# Reemplaza "Ethernet" por el Name real (Get-NetAdapter)
+Set-NetAdapterPowerManagement -Name "Ethernet" -WakeOnMagicPacket Enabled
+powercfg /deviceenablewake "$((Get-NetAdapter -Name 'Ethernet').InterfaceDescription)"
+```
+
+---
+
 ## Apagar OrbStack en el Mac
 
 Una vez que el flujo remoto funcione y ya no corras contenedores en el Mac:
