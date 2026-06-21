@@ -35,12 +35,19 @@ Todos los scripts viven en [`local-remote/`](.).
 
 | Fase | Dónde | Qué |
 |------|-------|-----|
-| 0 | MSI + router | Red estable + SSH del Mac a la MSI |
+| 0 | MSI + router | Red estable + SSH del Mac a la MSI (**Tailscale recomendado**) |
 | 1 | MSI | DAMP corriendo |
-| 2 | Mac | `*.test` → IP de la MSI |
+| 2 | Mac | `*.test` → IP de la MSI (dnsmasq + `no-hosts` + TLS) |
 | 3 | Mac | Sync de código (Mutagen) |
 | 4 | Mac | Deploy remoto (`damp-remote`) |
+| — | MSI | Adoptar un proyecto nuevo (receta completa, en Fase 4) |
 | 5 | — | (Opcional) acceso cooperativo tipo ngrok |
+
+> **Setup de referencia (el que montamos):** MSI con Win11 + Debian/WSL2 (systemd
+> activo) + Docker Engine. Conexión por **Tailscale**, IP-MSI `100.122.215.78`,
+> usuario `chrispider`, repo en `/home/chrispider/sourcecode/damp`. Alias SSH
+> `msi-damp` (puerto 22). Probado end-to-end con un proyecto CI4 (frankenphp)
+> sirviendo en `https://miproyecto.test` desde el navegador del Mac.
 
 ---
 
@@ -57,12 +64,53 @@ Elige una opción:
 - **Reserva DHCP (recomendado para LAN de casa):** en tu router (gateway
   `192.168.68.1`), reserva una IP fija para la MAC de la MSI (p. ej.
   `192.168.68.42`). Así la MSI siempre tiene la misma IP en Windows.
-- **Tailscale:** instala Tailscale en Mac y MSI; obtienes una IP `100.x` estable
-  que además sirve para el acceso cooperativo (Fase 5). Inmune a cambios de red.
+- **Tailscale (lo que usamos en producción de este setup):** instala Tailscale en
+  Mac y MSI; obtienes una IP `100.x` estable que además sirve para el acceso
+  cooperativo (Fase 5). Inmune a cambios de red y evita el port-forward de
+  Windows por completo (ver 0.2). **Recomendado.**
 
-> A partir de aquí, `IP-MSI` = la IP estable que elegiste.
+> A partir de aquí, `IP-MSI` = la IP estable que elegiste. En este setup real fue
+> la IP Tailscale de la MSI: `100.122.215.78`.
 
-### 0.2 — SSH del Mac hacia la Debian/WSL2
+#### Camino Tailscale (recomendado, sin portproxy)
+
+Como Tailscale corre **dentro** de WSL2 igual que `sshd` y Caddy, el Mac llega
+directo a los puertos de WSL2 (`22`, `80`, `443`) por la IP `100.x`. **No hace
+falta** el `netsh portproxy` ni abrir el firewall de Windows.
+
+**En la MSI (Debian/WSL2):**
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+# Con systemd activo en WSL2 (lo recomendado):
+sudo systemctl enable --now tailscaled
+sudo tailscale up        # imprime una URL → ábrela y autentica en el navegador
+tailscale ip -4          # anota la IP 100.x → esta es tu IP-MSI
+```
+
+> Si tu WSL2 **no** tiene systemd, arranca el daemon en modo userspace:
+> `sudo tailscaled --tun=userspace-networking --socks5-server=localhost:1055 &`
+> y luego `sudo tailscale up`. (Mejor habilitar systemd en `/etc/wsl.conf` con
+> `[boot]\nsystemd=true` y `wsl --shutdown`.)
+
+**En el Mac:**
+
+```bash
+brew install --cask tailscale
+open -a Tailscale         # inicia sesión con la MISMA cuenta (ícono barra de menú → Log in)
+```
+
+Verifica conectividad (ICMP puede no pasar por Tailscale; usa TCP):
+
+```bash
+nc -z -G 6 100.122.215.78 22 && echo "SSH alcanzable"
+```
+
+Con Tailscale resuelto, **salta la sección 0.2** (port-forward) y ve directo a la
+llave SSH más abajo (usando puerto `22`, no `2222`).
+
+### 0.2 — SSH del Mac hacia la Debian/WSL2 (solo camino LAN/portproxy)
+
 
 El reto: el `sshd` corre dentro de WSL2 (IP `172.x` interna), pero el Mac solo ve
 la IP de **Windows** (`IP-MSI`). Necesitas un **port-forward** de Windows → WSL2.
@@ -108,17 +156,19 @@ netsh interface portproxy show v4tov4
 # Llave (si no existe)
 test -f ~/.ssh/id_ed25519 || ssh-keygen -t ed25519 -C "mac→msi-damp"
 
-# Copia la llave a la MSI (usa el puerto 2222 y el usuario que imprimió setup-msi.sh)
-ssh-copy-id -p 2222 TU_USUARIO@IP-MSI
+# Copia la llave a la MSI.
+#   - Camino Tailscale: puerto 22       → ssh-copy-id TU_USUARIO@IP-MSI
+#   - Camino LAN/portproxy: puerto 2222 → ssh-copy-id -p 2222 TU_USUARIO@IP-MSI
+ssh-copy-id TU_USUARIO@IP-MSI
 ```
 
-Agrega a `~/.ssh/config` en el Mac:
+Agrega a `~/.ssh/config` en el Mac (con Tailscale, `Port 22`; con portproxy, `Port 2222`):
 
 ```sshconfig
 Host msi-damp
-    HostName IP-MSI
-    User TU_USUARIO
-    Port 2222
+    HostName IP-MSI          # p.ej. 100.122.215.78 (Tailscale)
+    User TU_USUARIO          # p.ej. chrispider
+    Port 22                  # 2222 si usas el portproxy de Windows
     ServerAliveInterval 30
 ```
 
@@ -157,20 +207,59 @@ repuntarlo a la MSI:
 
 ```bash
 cd ~/sourcecode/damp
-./local-remote/setup-mac-dns.sh IP-MSI       # p.ej. ./local-remote/setup-mac-dns.sh 192.168.68.42
+./local-remote/setup-mac-dns.sh IP-MSI       # p.ej. ./local-remote/setup-mac-dns.sh 100.122.215.78
 ```
 
 Verifica:
 
 ```bash
 ./local-remote/setup-mac-dns.sh --status
-ping -c1 damp.test     # debe responder desde IP-MSI
+dscacheutil -q host -a name damp.test        # debe mostrar IP-MSI
 ```
+
+> **ICMP/ping puede no responder** por Tailscale aunque todo funcione; valida con
+> TCP/HTTP, no con `ping`.
 
 Para **volver al modo local** (cuando quieras usar DAMP en el Mac otra vez):
 
 ```bash
 ./local-remote/setup-mac-dns.sh --revert     # *.test → 127.0.0.1
+```
+
+### Dos trampas reales que hay que destrabar (las vivimos)
+
+Tras correr el script, `damp.test` puede seguir resolviendo a `127.0.0.1`. Causas
+y arreglos:
+
+**1) dnsmasq no estaba corriendo.** El script intenta reiniciarlo pero a veces
+falla en silencio. Arráncalo (escucha en el puerto 53, requiere sudo):
+
+```bash
+sudo brew services restart dnsmasq
+```
+
+**2) `/etc/hosts` pisa a dnsmasq.** Si tenías entradas estáticas `127.0.0.1
+xxx.test` de tu modo local previo, **`/etc/hosts` gana siempre** sobre el wildcard
+de dnsmasq. Hay dos arreglos (aplica ambos para quedar robusto):
+
+```bash
+# a) Comenta las entradas .test estáticas (respaldo incluido)
+sudo cp /etc/hosts /etc/hosts.bak.$(date +%Y%m%d)
+sudo sed -i '' -E 's/^([[:space:]]*127\.0\.0\.1[[:space:]].*\.test.*)$/# \1/' /etc/hosts
+
+# b) Que dnsmasq IGNORE /etc/hosts por completo (lo dejamos permanente)
+#    Añade `no-hosts` al conf gestionado:
+printf '\n# Ignore /etc/hosts so stale 127.0.0.1 *.test never override the wildcard.\nno-hosts\n' \
+  >> "$(brew --prefix)/etc/dnsmasq.d/damp.conf"
+sudo brew services restart dnsmasq
+sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
+```
+
+Verifica que dnsmasq sirve el wildcard a la MSI:
+
+```bash
+dig +short @127.0.0.1 cualquier.test    # debe devolver IP-MSI
+dig +short @127.0.0.1 damp.test         # debe devolver IP-MSI (no 127.0.0.1)
 ```
 
 ### TLS / HTTPS sin warnings (`https://miproyecto.test`)
@@ -182,13 +271,22 @@ navegador es el del **Mac**, hay que confiar en **esa** CA en el Mac:
 # 1) Copia el root CA de Caddy desde la MSI al Mac
 ssh msi-damp 'docker exec damp-caddy cat /data/caddy/pki/authorities/local/root.crt' > /tmp/damp-msi-root.crt
 
-# 2) Conf​ía en él en el llavero del sistema del Mac
-sudo security add-trusted-cert -d -r trustRoot \
-  -k /Library/Keychains/System.keychain /tmp/damp-msi-root.crt
+# 2) Confía en él en el llavero del sistema del Mac (TODO EN UNA SOLA LÍNEA)
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain /tmp/damp-msi-root.crt
+```
+
+> Si pegas el comando partido con `\` y solo ves el "usage" de `add-trusted-cert`,
+> es que se cortó: pégalo **en una sola línea**.
+
+Verifica que el TLS valida (sin `-k`):
+
+```bash
+curl -s -o /dev/null -w "HTTP %{http_code} | tls_verify %{ssl_verify_result}\n" https://damp.test/
+# Esperado: HTTP 200 | tls_verify 0
 ```
 
 Reinicia el navegador. Si Chrome se queja por HSTS, limpia
-`chrome://net-internals/#hsts`. (Repite si Caddy regenera su CA.)
+`chrome://net-internals/#hsts`. (Repite el bloque si Caddy regenera su CA.)
 
 ---
 
@@ -199,6 +297,16 @@ Instala Mutagen en el Mac:
 ```bash
 brew install mutagen-io/mutagen/mutagen
 ```
+
+> **Si el tap intenta compilar y falla** (p.ej. error de Command Line Tools de
+> Xcode), usa el binario precompilado oficial — no necesita compilar ni sudo:
+> ```bash
+> cd /tmp
+> curl -fsSL -o mutagen.tgz https://github.com/mutagen-io/mutagen/releases/download/v0.18.1/mutagen_darwin_arm64_v0.18.1.tar.gz
+> tar xzf mutagen.tgz && mkdir -p ~/.local/bin && cp mutagen mutagen-agents.tar.gz ~/.local/bin/
+> chmod +x ~/.local/bin/mutagen && mutagen version   # asegúrate que ~/.local/bin esté en PATH
+> ```
+> (Ajusta `darwin_arm64` / versión según tu Mac.)
 
 Configura el proyecto a sincronizar. Copia la plantilla y edítala:
 
@@ -235,7 +343,7 @@ Ahora cada cambio en el Mac aparece en la MSI en sub-segundo. Para detener:
 Si prefieres el deployment nativo del IDE (o como respaldo):
 
 1. **Settings → Build, Execution, Deployment → Deployment → +SFTP**.
-2. SSH config: el `msi-damp` (host `IP-MSI`, puerto `2222`, tu usuario+llave).
+2. SSH config: el `msi-damp` (host `IP-MSI`, puerto `22` con Tailscale o `2222` con portproxy, tu usuario+llave).
 3. **Root path:** `/home/TU_USUARIO/sourcecode`.
 4. **Mappings:** local `…/miproyecto` → deployment `/miproyecto`.
 5. **Options → Upload changed files automatically to the default server →
@@ -261,9 +369,13 @@ mkdir -p ~/.config/damp-remote
 cat > ~/.config/damp-remote/config <<'EOF'
 DAMP_REMOTE_HOST=msi-damp
 DAMP_REMOTE_DIR=/home/TU_USUARIO/sourcecode/damp
-DAMP_REMOTE_PORT=2222
+DAMP_REMOTE_PORT=22
 EOF
 ```
+
+> `DAMP_REMOTE_PORT=22` con Tailscale; usa `2222` solo si conectas por el
+> portproxy de Windows. (Si tu `~/.ssh/config` ya define el `Port` del alias
+> `msi-damp`, este valor es redundante pero no estorba.)
 
 Verifica todo el canal (SSH + binario damp + Docker en la MSI):
 
@@ -298,15 +410,83 @@ damp-remote start miproyecto
 open https://miproyecto.test
 ```
 
-### Adoptar un proyecto nuevo en la MSI
+### Adoptar un proyecto nuevo en la MSI (receta completa, probada)
 
-Como `damp init` es interactivo y detecta tipo de proyecto, córrelo en la MSI
-**después** de que el código ya esté sincronizado allá:
+Esta es la secuencia real que validamos con un proyecto CodeIgniter 4
+(frankenphp). Sirve de plantilla para cualquier proyecto PHP. Sustituye
+`miproyecto` por el nombre real.
+
+> **Por qué hay pasos manuales:** Mutagen **no** sincroniza `vendor/`,
+> `node_modules/` ni `writable/` (son pesados o de runtime). Por eso esas piezas
+> se generan/crean **en la MSI**, no se copian por la red. La base de datos
+> tampoco se sincroniza: se copia aparte (paso 6).
 
 ```bash
-# (asegúrate que mutagen ya copió el proyecto a la MSI)
-ssh -t msi-damp 'cd ~/sourcecode/miproyecto && ~/sourcecode/damp/core/bin/damp init'
+# ── 1. Sync del código a la MSI (desde el Mac) ─────────────────────
+cd ~/sourcecode/miproyecto
+cp ~/sourcecode/damp/local-remote/mutagen.yml ./mutagen.yml   # si no existe
+# Edita el bloque sync con alpha (Mac) y beta (msi-damp:/home/USER/sourcecode/miproyecto)
+echo "mutagen.yml" >> .gitignore
+mutagen project start
+mutagen sync list           # espera "Watching for changes"
+
+# ── 2. Build + arranque del contenedor en la MSI ───────────────────
+# OJO: la primera build de frankenphp tarda (compila extensiones PHP). Si tu
+# shell tiene timeout, lánzalo en background en la MSI para que sobreviva:
+ssh msi-damp 'cd ~/sourcecode/damp && nohup ./core/bin/damp start miproyecto > /tmp/miproyecto-start.log 2>&1 &'
+ssh msi-damp 'tail -f /tmp/miproyecto-start.log'   # observa hasta "miproyecto is running"
+
+# ── 3. Registrar el dominio en el Caddy GLOBAL ─────────────────────
+# Si `damp start` no escribió el routing (proyecto ya inicializado en otra
+# máquina), créalo a mano. El upstream = container_name del docker-compose
+# del proyecto (frankenphp escucha en :80).
+ssh msi-damp 'cat > ~/sourcecode/damp/core/caddy/projects.d/miproyecto.caddy <<EOF
+miproyecto.test {
+    reverse_proxy miproyecto:80
+}
+EOF'
+ssh msi-damp 'cd ~/sourcecode/damp && ./core/bin/damp reload'
+
+# ── 4. Dependencias (composer) DENTRO de la MSI ────────────────────
+# El contenedor frankenphp no trae composer; usa la imagen oficial montando
+# el código. --ignore-platform-req=ext-intl: la imagen composer no tiene intl,
+# pero el contenedor frankenphp SÍ (ahí se ejecuta), así que es seguro ignorarlo.
+ssh msi-damp 'docker run --rm -v ~/sourcecode/miproyecto:/app -w /app composer:2 \
+  install --no-interaction --no-progress --ignore-platform-req=ext-intl'
+
+# ── 5. Directorios de runtime (CI4 writable/) en el contenedor ─────
+ssh msi-damp 'docker exec miproyecto sh -c "mkdir -p /app/writable/cache /app/writable/logs /app/writable/session /app/writable/uploads /app/writable/debugbar && chmod -R 777 /app/writable"'
+
+# ── 6. Base de datos: copiarla del Mac (OrbStack) → damp-db de la MSI ─
+# 6a. Crea DB + usuario en la MSI con las credenciales que espera el .env del
+#     proyecto (database.default.{database,username,password}):
+ssh msi-damp 'docker exec damp-db mysql -uroot -proot -e '\''CREATE DATABASE IF NOT EXISTS mi_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER IF NOT EXISTS "mi_user"@"%" IDENTIFIED BY "MI_PASS"; GRANT ALL PRIVILEGES ON mi_db.* TO "mi_user"@"%"; FLUSH PRIVILEGES;'\'''
+# 6b. Dump de la base local (OrbStack en el Mac) y restauración en la MSI:
+docker exec damp-db mysqldump -uroot -proot --single-transaction --no-tablespaces \
+  --routines --triggers --events mi_db > /tmp/mi_db.sql
+ssh msi-damp 'docker exec -i damp-db mysql -uroot -proot mi_db' < /tmp/mi_db.sql
+#  (alternativa equivalente: damp-remote import mi_db /tmp/mi_db.sql)
+
+# ── 7. Verifica desde el navegador del Mac ─────────────────────────
+curl -sL -o /dev/null -w "HTTP %{http_code} | %{url_effective}\n" https://miproyecto.test/
+open https://miproyecto.test
 ```
+
+> **`damp init` interactivo:** si en vez de la receta de arriba prefieres el
+> wizard, córrelo con TTY **después** del sync. Pero ojo: regenera
+> `Dampfile`/`Dockerfile`/`Caddyfile` y pregunta "Overwrite all generated
+> files?" — responde **n** si el proyecto ya trae los suyos.
+> `ssh -t msi-damp 'cd ~/sourcecode/miproyecto && ~/sourcecode/damp/core/bin/damp init'`
+
+#### Mapa de errores típicos al adoptar un proyecto
+
+| Síntoma en `https://miproyecto.test` | Causa | Paso que lo arregla |
+|---|---|---|
+| `tlsv1 alert internal error` / `HTTP 000` | Caddy no tiene cert para ese dominio (no registrado / TLD viejo) | Paso 3 (registrar + reload) |
+| `Failed opening required ... vendor/...` | Falta `vendor/` (no se sincroniza) | Paso 4 (composer) |
+| `HTTP 503` | Falta `writable/` (CI4) o el contenedor no levanta | Paso 5 |
+| `Unable to connect to the database / Access denied` | DB o usuario no existen en `damp-db` | Paso 6a |
+| `Table '...' doesn't exist` | DB vacía (sin esquema/datos) | Paso 6b (copiar dump) |
 
 ---
 
@@ -392,6 +572,10 @@ osascript -e 'quit app "OrbStack"'
 Si algún día quieres volver al modo 100% local: arranca OrbStack y corre
 `./local-remote/setup-mac-dns.sh --revert`.
 
+> **No apagues OrbStack todavía si aún tienes bases de datos locales que migrar.**
+> El `damp-db` de OrbStack en el Mac es la fuente del `mysqldump` para poblar la
+> MSI (receta de adopción, paso 6). Apágalo cuando ya hayas copiado todo.
+
 ---
 
 ## Troubleshooting
@@ -405,6 +589,22 @@ Si algún día quieres volver al modo 100% local: arranca OrbStack y corre
 | Cert no confiable en el navegador | CA de la MSI no importada en el Mac | Repite el bloque TLS de la Fase 2 |
 | Cambios no llegan a la MSI | Mutagen pausado o en conflicto | `mutagen sync list`; reanuda/flush; revisa `ignore` |
 | Web carga pero assets/Vite no | Vite no escucha en `0.0.0.0` | `damp init` aplica el patch de `vite.config`; revisa `allowedHosts` |
+| Todo respondía y de pronto `HTTP 000` / timeouts intermitentes | **La MSI se durmió/hibernó** (Windows) | Despiértala/enchúfala; ver "Mantener la MSI despierta". Con Tailscale, `nc -z IP-MSI 22` confirma si está viva |
+| `damp.test` da `tlsv1 alert internal error` pero `cualquier.test` no | Caddy corre con config vieja (p.ej. TLD `.local` de otra sesión) y no tiene cert para `.test` | `ssh msi-damp 'cd ~/sourcecode/damp && ./core/bin/damp reload'` para que tome el `.env` con `DAMP_TLD=test` |
+| `dig @127.0.0.1 x.test` da `127.0.0.1` aunque `damp.conf` apunte a la MSI | dnsmasq lee `/etc/hosts` (prioridad) o no recargó | Añade `no-hosts` a `damp.conf` + comenta `/etc/hosts` + `sudo brew services restart dnsmasq` (ver Fase 2) |
+| `damp-remote start` parece colgarse y luego no hay contenedor | El build era hijo de la sesión SSH y murió al cerrarse / timeout | Lánzalo con `nohup ... &` en la MSI (ver receta paso 2) |
+| `add-trusted-cert` solo imprime su "usage" | Pegaste el comando partido con `\` | Pégalo en **una sola línea** |
+| `cmd.exe`/`powershell.exe` no funcionan vía `ssh msi-damp` | Interop WSL→Windows deshabilitado | Aplica lo de PowerShell/`.wslconfig` **directamente en Windows**, no por SSH |
+
+### Diagnóstico rápido de conectividad (desde el Mac)
+
+```bash
+nc -z -G 6 IP-MSI 22  && echo "SSH ok"      # ¿MSI viva?
+nc -z -G 6 IP-MSI 80  && echo "HTTP ok"     # ¿Caddy escucha?
+nc -z -G 6 IP-MSI 443 && echo "HTTPS ok"
+ssh msi-damp 'docker ps --format "{{.Names}}: {{.Status}}"'   # ¿stack arriba?
+curl -s -o /dev/null -w "%{http_code} %{ssl_verify_result}\n" https://damp.test/
+```
 
 ---
 
