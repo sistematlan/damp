@@ -64,16 +64,12 @@ sync:
       defaultFileMode: 0644
       defaultDirectoryMode: 0755
 
-  # ── Example session: edit ~/sourcecode/mancii on the Mac, run on MSI ──
+  # ── Example session ───────────────────────────────────────────
   # Duplicate/rename this block per project. The MSI path should match
   # where the project will live on the remote (and what damp-remote uses).
+  # `damp-adopt` generates this file for you, so you rarely edit it by hand.
   #
-  # mancii:
-  #   alpha: "/Users/christianhernandez/sourcecode/mancii"
-  #   beta:  "MSI_SSH:/home/youruser/sourcecode/mancii"
+  # myproject:
+  #   alpha: "${HOME}/sourcecode/myproject"        # Mac: where you edit
+  #   beta:  "msi-damp:~/sourcecode/myproject"     # MSI: where containers read
 
-  # ── Active sessions ───────────────────────────────────────────
-  # Fill these in. Replace MSI_SSH and the username/paths.
-  project:
-    alpha: "/Users/christianhernandez/sourcecode/REPLACE_ME"
-    beta:  "MSI_SSH:/home/REPLACE_ME/sourcecode/REPLACE_ME"

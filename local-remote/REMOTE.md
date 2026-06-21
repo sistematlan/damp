@@ -43,11 +43,35 @@ Todos los scripts viven en [`local-remote/`](.).
 | — | MSI | Adoptar un proyecto nuevo (receta completa, en Fase 4) |
 | 5 | — | (Opcional) acceso cooperativo tipo ngrok |
 
-> **Setup de referencia (el que montamos):** MSI con Win11 + Debian/WSL2 (systemd
-> activo) + Docker Engine. Conexión por **Tailscale**, IP-MSI `100.122.215.78`,
-> usuario `chrispider`, repo en `/home/chrispider/sourcecode/damp`. Alias SSH
-> `msi-damp` (puerto 22). Probado end-to-end con un proyecto CI4 (frankenphp)
-> sirviendo en `https://miproyecto.test` desde el navegador del Mac.
+> **Ejemplo de referencia (sustituye por lo tuyo):** una MSI con Win11 +
+> Debian/WSL2 (systemd activo) + Docker Engine, conectada por **Tailscale**.
+> En los comandos verás valores de muestra como IP-MSI `100.x.y.z`, usuario
+> `<tu-usuario>` y repo en `~/sourcecode/damp`. **Nada está fijado a un equipo
+> concreto**: cada valor lo provees tú (o lo detectan los scripts). Alias SSH
+> sugerido: `msi-damp` (puerto 22 con Tailscale).
+
+---
+
+## Quickstart (vía automática, recomendada)
+
+Dos scripts hacen casi todo. No tienen rutas ni credenciales fijas: todo se
+detecta o se pregunta.
+
+```bash
+# En la MSI (Debian/WSL2): bootstrap del host
+bash ~/sourcecode/damp/local-remote/setup-msi.sh        # imprime user, IP, paths
+
+# En el Mac: prepara el lado local (deps, SSH, DNS, TLS, damp-remote)
+bash ~/sourcecode/damp/local-remote/setup-mac.sh        # interactivo; pregunta user/IP/puerto
+bash ~/sourcecode/damp/local-remote/setup-mac.sh --check # verifica el estado
+
+# Adoptar cualquier proyecto (sync + build + ruta + composer + writable + DB)
+damp-adopt ~/sourcecode/mi-proyecto
+```
+
+`damp-adopt` es **idempotente**: si un proyecto ya está adoptado, lo verifica sin
+romper nada. Las fases de abajo explican cada paso por si prefieres hacerlo a
+mano o necesitas depurar.
 
 ---
 
@@ -70,7 +94,7 @@ Elige una opción:
   Windows por completo (ver 0.2). **Recomendado.**
 
 > A partir de aquí, `IP-MSI` = la IP estable que elegiste. En este setup real fue
-> la IP Tailscale de la MSI: `100.122.215.78`.
+> la IP Tailscale de la MSI: `100.x.y.z`.
 
 #### Camino Tailscale (recomendado, sin portproxy)
 
@@ -103,7 +127,7 @@ open -a Tailscale         # inicia sesión con la MISMA cuenta (ícono barra de 
 Verifica conectividad (ICMP puede no pasar por Tailscale; usa TCP):
 
 ```bash
-nc -z -G 6 100.122.215.78 22 && echo "SSH alcanzable"
+nc -z -G 6 100.x.y.z 22 && echo "SSH alcanzable"
 ```
 
 Con Tailscale resuelto, **salta la sección 0.2** (port-forward) y ve directo a la
@@ -166,8 +190,8 @@ Agrega a `~/.ssh/config` en el Mac (con Tailscale, `Port 22`; con portproxy, `Po
 
 ```sshconfig
 Host msi-damp
-    HostName IP-MSI          # p.ej. 100.122.215.78 (Tailscale)
-    User TU_USUARIO          # p.ej. chrispider
+    HostName IP-MSI          # p.ej. 100.x.y.z (Tailscale)
+    User TU_USUARIO          # el que imprimió setup-msi.sh
     Port 22                  # 2222 si usas el portproxy de Windows
     ServerAliveInterval 30
 ```
@@ -207,7 +231,7 @@ repuntarlo a la MSI:
 
 ```bash
 cd ~/sourcecode/damp
-./local-remote/setup-mac-dns.sh IP-MSI       # p.ej. ./local-remote/setup-mac-dns.sh 100.122.215.78
+./local-remote/setup-mac-dns.sh IP-MSI       # p.ej. ./local-remote/setup-mac-dns.sh 100.x.y.z
 ```
 
 Verifica:
@@ -319,7 +343,7 @@ Edita el bloque `sync.project` (o crea uno por proyecto):
 ```yaml
 sync:
   miproyecto:
-    alpha: "/Users/christianhernandez/sourcecode/miproyecto"
+    alpha: "${HOME}/sourcecode/miproyecto"
     beta:  "msi-damp:/home/TU_USUARIO/sourcecode/miproyecto"
 ```
 
@@ -411,6 +435,10 @@ open https://miproyecto.test
 ```
 
 ### Adoptar un proyecto nuevo en la MSI (receta completa, probada)
+
+> **Atajo:** `damp-adopt <ruta-del-proyecto>` hace todos estos pasos
+> automáticamente y es idempotente. Lee la receta de abajo si quieres entender
+> qué ocurre o necesitas depurar un paso concreto.
 
 Esta es la secuencia real que validamos con un proyecto CodeIgniter 4
 (frankenphp). Sirve de plantilla para cualquier proyecto PHP. Sustituye
@@ -611,6 +639,13 @@ curl -s -o /dev/null -w "%{http_code} %{ssl_verify_result}\n" https://damp.test/
 ## Archivos de este setup
 
 - [`local-remote/setup-msi.sh`](setup-msi.sh) — bootstrap de la MSI (SSH, Docker, repo, `.env`).
+- [`local-remote/setup-mac.sh`](setup-mac.sh) — onboarding del Mac (deps, SSH, DNS, TLS, `damp-remote`); `--check` para verificar.
+- [`local-remote/damp-adopt`](damp-adopt) — adopta un proyecto en la MSI de punta a punta (sync, build, ruta Caddy, composer, `writable/`, DB). Idempotente.
 - [`local-remote/setup-mac-dns.sh`](setup-mac-dns.sh) — repunta `*.test` del Mac a la MSI (y `--revert`).
-- [`local-remote/mutagen.yml`](mutagen.yml) — plantilla de sync Mac → MSI.
+- [`local-remote/mutagen.yml`](mutagen.yml) — plantilla de defaults de sync (las sesiones las genera `damp-adopt`).
 - [`local-remote/damp-remote`](damp-remote) — ejecuta comandos `damp` en la MSI por SSH.
+
+> **Portabilidad:** ninguno de estos scripts contiene rutas, usuarios, IPs ni
+> credenciales fijas. Todo se detecta del entorno (`$HOME`, `whoami`,
+> `brew --prefix`), se lee de config/`.env`, o se pregunta. Funcionan en
+> cualquier Mac contra cualquier host DAMP remoto.
