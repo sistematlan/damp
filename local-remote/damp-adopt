@@ -3,16 +3,16 @@
 #  damp-adopt — bring a local project onto the remote DAMP host
 # -------------------------------------------------------------
 #  Run this ON YOUR MAC, from anywhere. It automates the
-#  "adopt a project on the MSI" recipe so it works for any user
+#  "adopt a project on the remote host" recipe so it works for any user
 #  and any project, with no hardcoded paths or credentials.
 #
 #  It will:
 #    1. Generate/extend the project's mutagen.yml and start sync
-#    2. Build + start the project's containers on the MSI
+#    2. Build + start the project's containers on the remote host
 #    3. Register the project domain in the global Caddy + reload
-#    4. composer install inside the MSI (PHP projects)
+#    4. composer install inside the remote host (PHP projects)
 #    5. Create CI4 writable/ dirs (if applicable)
-#    6. Create DB + user on the MSI; optionally copy the local DB
+#    6. Create DB + user on the remote host; optionally copy the local DB
 #    7. Verify https://<project>.<TLD>
 #
 #  Config comes from ~/.config/damp-remote/config (written by
@@ -139,8 +139,8 @@ done
 SSH "test -f ~/sourcecode/${PROJECT}/composer.json -o -f ~/sourcecode/${PROJECT}/package.json" \
   && ok "Code present on ${REMOTE_HOST}" || warn "Sync may still be running; continuing"
 
-# ── 2. Build + start on the MSI ────────────────────────────────
-step "[2/7] Build + start containers on the MSI"
+# ── 2. Build + start on the remote host ────────────────────────────────
+step "[2/7] Build + start containers on the remote host"
 if SSH "docker ps --format '{{.Names}}' | grep -qx ${PROJECT}"; then
   ok "Container '${PROJECT}' already running"
 else
@@ -149,7 +149,7 @@ else
     echo -e "  ${BOLD}ssh -t ${REMOTE_HOST} 'cd ~/sourcecode/${PROJECT} && ${DAMP_BIN} init'${NC}"
     confirm "Run 'damp init' now (interactive)?" && SSH_TTY "cd ~/sourcecode/${PROJECT} && ${DAMP_BIN} init" || true
   fi
-  info "Starting (first build can take minutes; running in background on the MSI)..."
+  info "Starting (first build can take minutes; running in background on the remote host)..."
   SSH "cd ${REMOTE_DIR} && nohup ${DAMP_BIN} start ${PROJECT} > /tmp/${PROJECT}-start.log 2>&1 & echo started"
   for _ in $(seq 1 90); do
     SSH "docker ps --format '{{.Names}}' | grep -qx ${PROJECT}" && break
@@ -176,7 +176,7 @@ SSH "cd ${REMOTE_DIR} && ${DAMP_BIN} reload" >/dev/null 2>&1 && ok "Caddy reload
 
 # ── 4. Composer (PHP projects) ─────────────────────────────────
 if [ "$TYPE" = "ci4" ] || [ "$TYPE" = "laravel" ] || [ "$TYPE" = "php" ]; then
-  step "[4/7] composer install (inside the MSI)"
+  step "[4/7] composer install (inside the remote host)"
   if SSH "test -f ~/sourcecode/${PROJECT}/vendor/autoload.php"; then
     ok "vendor/ already present"
   else
@@ -210,15 +210,15 @@ if [ "$DO_DB" = "1" ] && { [ "$TYPE" = "ci4" ] || [ "$TYPE" = "laravel" ] || [ "
   else
     info "DB '${DBNAME}', user '${DBUSER}' (from .env)"
     SSH "docker exec damp-db mysql -uroot -proot -e 'CREATE DATABASE IF NOT EXISTS \`${DBNAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER IF NOT EXISTS \"${DBUSER}\"@\"%\" IDENTIFIED BY \"${DBPASS}\"; ALTER USER \"${DBUSER}\"@\"%\" IDENTIFIED BY \"${DBPASS}\"; GRANT ALL PRIVILEGES ON \`${DBNAME}\`.* TO \"${DBUSER}\"@\"%\"; FLUSH PRIVILEGES;' 2>/dev/null" \
-      && ok "DB + user ensured on the MSI" || warn "Could not create DB/user"
+      && ok "DB + user ensured on the remote host" || warn "Could not create DB/user"
 
     # Offer to copy data from a local MySQL (OrbStack) if it has this DB.
     if command -v docker >/dev/null 2>&1 && docker exec damp-db true >/dev/null 2>&1; then
       if docker exec damp-db mysql -uroot -proot -N -e "SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME='${DBNAME}';" 2>/dev/null | grep -qx "$DBNAME"; then
-        if confirm "Local DB '${DBNAME}' found (OrbStack). Copy it to the MSI now? (overwrites remote tables)"; then
+        if confirm "Local DB '${DBNAME}' found (OrbStack). Copy it to the remote host now? (overwrites remote tables)"; then
           dump="$(mktemp)"
           docker exec damp-db mysqldump -uroot -proot --single-transaction --no-tablespaces --routines --triggers --events "$DBNAME" > "$dump" 2>/dev/null
-          SSH "docker exec -i damp-db mysql -uroot -proot ${DBNAME}" < "$dump" && ok "Copied local DB → MSI ($(grep -c 'CREATE TABLE' "$dump") tables)" || warn "DB copy failed"
+          SSH "docker exec -i damp-db mysql -uroot -proot ${DBNAME}" < "$dump" && ok "Copied local DB → remote host ($(grep -c 'CREATE TABLE' "$dump") tables)" || warn "DB copy failed"
           rm -f "$dump"
         fi
       else

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================
-#  setup-msi.sh — bootstrap the MSI (Debian/WSL2) as DAMP host
+#  setup-remote.sh — bootstrap the remote host (Debian/WSL2) as DAMP host
 # -------------------------------------------------------------
-#  Run this ON THE MSI, inside Debian/WSL2. It prepares the box
+#  Run this on the remote host, inside Debian/WSL2. It prepares the box
 #  to receive code (Mutagen) and run the DAMP stack remotely:
 #
 #    1. Installs/enables OpenSSH server (so the Mac can connect)
@@ -15,9 +15,9 @@
 #  DNS — those are documented in docs/REMOTE.md because they
 #  depend on your network choices.
 #
-#  Usage (on the MSI):
-#    bash setup-msi.sh
-#    bash setup-msi.sh --info     # just print connection info
+#  Usage (on the remote host):
+#    bash setup-remote.sh
+#    bash setup-remote.sh --info     # just print connection info
 # =============================================================
 set -euo pipefail
 
@@ -48,7 +48,7 @@ print_info() {
 
 if [ "${1:-}" = "--info" ]; then print_info; exit 0; fi
 
-echo -e "${BOLD}DAMP MSI bootstrap${NC}"
+echo -e "${BOLD}DAMP remote host bootstrap${NC}"
 is_wsl && echo -e "${DIM}Detected WSL2.${NC}" || echo -e "${DIM}Native Linux (not WSL).${NC}"
 
 # ── 1. OpenSSH server ──────────────────────────────────────────
@@ -108,7 +108,7 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}${BOLD}MSI bootstrap complete.${NC}"
+echo -e "${GREEN}${BOLD}Remote host bootstrap complete.${NC}"
 echo -e "Next: start the stack with ${BOLD}$DAMP_DIR/core/bin/damp up${NC}"
 echo -e "(or from the Mac once SSH is wired: ${BOLD}damp-remote up${NC})"
 print_info

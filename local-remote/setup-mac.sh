@@ -3,23 +3,23 @@
 #  setup-mac.sh — prepare THIS Mac to drive a remote DAMP host
 # -------------------------------------------------------------
 #  Run this ON YOUR MAC. It wires the local side of the
-#  "edit local, run remote" workflow against an MSI (or any
-#  Linux/WSL2 box) that already ran local-remote/setup-msi.sh.
+#  "edit local, run remote" workflow against a remote host (or any
+#  Linux/WSL2 box) that already ran local-remote/setup-remote.sh.
 #
 #  It is idempotent and asks before doing anything with sudo.
 #  Nothing here is specific to any single user/machine — every
-#  value (SSH host, user, MSI IP, repo path) is provided by you.
+#  value (SSH host, user, IP del host remoto, repo path) is provided by you.
 #
 #  What it does (each step can be skipped):
 #    1. Check/Install deps: Tailscale, dnsmasq, mutagen
-#    2. SSH: ensure a key + ~/.ssh/config alias to the MSI
-#    3. DNS: point *.<TLD> at the MSI (via setup-mac-dns.sh)
-#    4. TLS: trust the MSI Caddy root CA (HTTPS without warnings)
+#    2. SSH: ensure a key + ~/.ssh/config alias to the remote host
+#    3. DNS: point *.<TLD> at the remote host (via setup-mac-dns.sh)
+#    4. TLS: trust the remote host Caddy root CA (HTTPS without warnings)
 #    5. damp-remote: symlink into PATH + write config
 #
 #  Usage:
 #    bash local-remote/setup-mac.sh
-#    bash local-remote/setup-mac.sh --host msi-damp --user youruser \
+#    bash local-remote/setup-mac.sh --host damp-host --user youruser \
 #         --ip 100.x.y.z --remote-dir '~/sourcecode/damp' --port 22 --tld test
 #    bash local-remote/setup-mac.sh --check     # verify an existing setup
 # =============================================================
@@ -57,9 +57,16 @@ confirm() {
 }
 
 # ── Defaults / args ────────────────────────────────────────────
-SSH_HOST="msi-damp"
+# If an existing damp-remote config is present, use its host as the default
+# so --check respects what the user already has set up.
+_ssh_default="damp-host"
+if [ -f "$HOME/.config/damp-remote/config" ]; then
+  _ssh_default="$(grep -E '^DAMP_REMOTE_HOST=' "$HOME/.config/damp-remote/config" | cut -d= -f2 | tr -d '\r' || true)"
+  [ -n "$_ssh_default" ] || _ssh_default="damp-host"
+fi
+SSH_HOST="$_ssh_default"
 SSH_USER=""
-MSI_IP=""
+REMOTE_IP=""
 SSH_PORT="22"
 REMOTE_DIR='~/sourcecode/damp'
 TLD="test"
@@ -69,7 +76,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --host)       SSH_HOST="$2"; shift 2 ;;
     --user)       SSH_USER="$2"; shift 2 ;;
-    --ip)         MSI_IP="$2"; shift 2 ;;
+    --ip)         REMOTE_IP="$2"; shift 2 ;;
     --port)       SSH_PORT="$2"; shift 2 ;;
     --remote-dir) REMOTE_DIR="$2"; shift 2 ;;
     --tld)        TLD="$2"; shift 2 ;;
@@ -80,7 +87,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-[ "$(uname -s)" = "Darwin" ] || die "This script is for macOS. On the MSI use setup-msi.sh."
+[ "$(uname -s)" = "Darwin" ] || die "This script is for macOS. on the remote host use setup-remote.sh."
 
 # ── --check mode ───────────────────────────────────────────────
 if [ "$CHECK_ONLY" = "1" ]; then
@@ -113,12 +120,12 @@ echo -e "${BOLD}DAMP — prepare this Mac for remote DAMP${NC}"
 echo -e "${DIM}Repo: ${REPO_DIR}${NC}\n"
 
 # Gather connection details if not provided.
-[ -n "$SSH_USER" ] || SSH_USER="$(ask "Remote user on the MSI (from setup-msi.sh output)")"
+[ -n "$SSH_USER" ] || SSH_USER="$(ask "Remote user on the remote host (from setup-remote.sh output)")"
 [ -n "$SSH_USER" ] || die "remote user is required"
-[ -n "$MSI_IP" ]   || MSI_IP="$(ask "MSI IP (Tailscale 100.x recommended, or LAN IP)")"
-[ -n "$MSI_IP" ]   || die "MSI IP is required"
+[ -n "$REMOTE_IP" ]   || REMOTE_IP="$(ask "IP del host remoto (Tailscale 100.x recommended, or LAN IP)")"
+[ -n "$REMOTE_IP" ]   || die "IP del host remoto is required"
 SSH_PORT="$(ask "SSH port (22 for Tailscale, 2222 for Windows portproxy)" "$SSH_PORT")"
-REMOTE_DIR="$(ask "Path to the damp repo on the MSI" "/home/${SSH_USER}/sourcecode/damp")"
+REMOTE_DIR="$(ask "Path to the damp repo on the remote host" "/home/${SSH_USER}/sourcecode/damp")"
 TLD="$(ask "DAMP TLD" "$TLD")"
 
 # ── 1. Dependencies ────────────────────────────────────────────
@@ -128,7 +135,7 @@ command -v brew >/dev/null 2>&1 || die "Homebrew required: https://brew.sh"
 if ! command -v tailscale >/dev/null 2>&1 && [ ! -d /Applications/Tailscale.app ]; then
   if confirm "Tailscale not found. Install it (brew --cask tailscale)?"; then
     brew install --cask tailscale && open -a Tailscale || warn "install Tailscale manually"
-    warn "Log in to Tailscale (menu bar) with the SAME account used on the MSI, then re-run."
+    warn "Log in to Tailscale (menu bar) with the SAME account used on the remote host, then re-run."
   fi
 else
   ok "Tailscale present"
@@ -166,7 +173,7 @@ else
   {
     echo ""
     echo "Host ${SSH_HOST}"
-    echo "    HostName ${MSI_IP}"
+    echo "    HostName ${REMOTE_IP}"
     echo "    User ${SSH_USER}"
     echo "    Port ${SSH_PORT}"
     echo "    ServerAliveInterval 30"
@@ -177,15 +184,15 @@ fi
 if ssh -o ConnectTimeout=8 -o BatchMode=yes "$SSH_HOST" 'echo ok' >/dev/null 2>&1; then
   ok "Passwordless SSH to '${SSH_HOST}' works"
 else
-  warn "Copy your key to the MSI (you'll be asked for the remote password once):"
+  warn "Copy your key to the remote host (you'll be asked for the remote password once):"
   echo -e "  ${BOLD}ssh-copy-id ${SSH_HOST}${NC}"
   confirm "Run ssh-copy-id now?" && ssh-copy-id "$SSH_HOST" || warn "Do it later, then re-run with --check"
 fi
 
-# ── 3. DNS: *.<TLD> → MSI ──────────────────────────────────────
-echo -e "\n${BOLD}[3/5] DNS (*.${TLD} → ${MSI_IP})${NC}"
-if confirm "Point *.${TLD} on this Mac at the MSI now? (uses sudo)"; then
-  DAMP_TLD="$TLD" bash "$SCRIPT_DIR/setup-mac-dns.sh" "$MSI_IP" || warn "DNS step had issues; see Fase 2 in REMOTE.md"
+# ── 3. DNS: *.<TLD> → remote host ──────────────────────────────────────
+echo -e "\n${BOLD}[3/5] DNS (*.${TLD} → ${REMOTE_IP})${NC}"
+if confirm "Point *.${TLD} on this Mac at the remote host now? (uses sudo)"; then
+  DAMP_TLD="$TLD" bash "$SCRIPT_DIR/setup-mac-dns.sh" "$REMOTE_IP" || warn "DNS step had issues; see Fase 2 in REMOTE.md"
   # Ensure dnsmasq ignores /etc/hosts so stale 127.0.0.1 *.TLD entries don't win.
   dnsconf="$(brew --prefix)/etc/dnsmasq.d/damp.conf"
   if [ -f "$dnsconf" ] && ! grep -q '^no-hosts' "$dnsconf"; then
@@ -195,22 +202,22 @@ if confirm "Point *.${TLD} on this Mac at the MSI now? (uses sudo)"; then
     ok "dnsmasq set to ignore /etc/hosts (no-hosts)"
   fi
 else
-  info "Skipped. Later: ./local-remote/setup-mac-dns.sh ${MSI_IP}"
+  info "Skipped. Later: ./local-remote/setup-mac-dns.sh ${REMOTE_IP}"
 fi
 
-# ── 4. TLS: trust the MSI Caddy root CA ────────────────────────
-echo -e "\n${BOLD}[4/5] TLS (trust MSI Caddy CA)${NC}"
+# ── 4. TLS: trust the remote host Caddy root CA ────────────────────────
+echo -e "\n${BOLD}[4/5] TLS (trust remote host Caddy CA)${NC}"
 if security find-certificate -c "Caddy Local Authority" /Library/Keychains/System.keychain >/dev/null 2>&1; then
   ok "A Caddy root CA is already trusted"
 else
   if ssh -o ConnectTimeout=8 -o BatchMode=yes "$SSH_HOST" 'true' >/dev/null 2>&1; then
-    if confirm "Fetch and trust the MSI Caddy root CA? (uses sudo)"; then
-      tmpcrt="/tmp/damp-msi-root.crt"
+    if confirm "Fetch and trust the remote host Caddy root CA? (uses sudo)"; then
+      tmpcrt="/tmp/damp-remote host-root.crt"
       if ssh "$SSH_HOST" 'docker exec damp-caddy cat /data/caddy/pki/authorities/local/root.crt' > "$tmpcrt" 2>/dev/null && [ -s "$tmpcrt" ]; then
         sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$tmpcrt" \
-          && ok "Trusted MSI Caddy root CA (restart your browser)" || warn "Could not add cert"
+          && ok "Trusted remote host Caddy root CA (restart your browser)" || warn "Could not add cert"
       else
-        warn "Could not read CA from MSI (is the stack up? 'damp-remote up')"
+        warn "Could not read CA from remote host (is the stack up? 'damp-remote up')"
       fi
     fi
   else

@@ -84,13 +84,13 @@ machine, with trusted HTTPS, zero tunneling services, and sub-second file sync.
 On the remote machine (inside Debian/WSL2 if using Windows):
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/sistematlan/damp/fix/proxy-upstream-container-name/local-remote/setup-msi.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/sistematlan/damp/fix/proxy-upstream-container-name/local-remote/setup-remote.sh)
 ```
 
 Or if you already have the repo:
 
 ```bash
-bash ~/sourcecode/damp/local-remote/setup-msi.sh
+bash ~/sourcecode/damp/local-remote/setup-remote.sh
 ```
 
 This installs/enables `sshd`, adds your user to the `docker` group, clones DAMP,
@@ -106,7 +106,7 @@ bash ~/sourcecode/damp/local-remote/setup-mac.sh
 This interactive script handles everything on the Mac side:
 
 - Checks/installs **Tailscale**, **dnsmasq**, and **Mutagen**
-- Creates an **SSH alias** (`msi-damp`) to the remote
+- Creates an **SSH alias** (`damp-host`) to the remote
 - Points **`*.test` DNS** at the remote machine
 - Trusts the remote's **Caddy root CA** (green-lock HTTPS)
 - Installs **`damp-remote`** and **`damp-adopt`** into your PATH
@@ -115,7 +115,7 @@ It asks for: the remote username, IP (Tailscale `100.x` recommended), SSH port,
 and repo path. You can also pass them as flags:
 
 ```bash
-bash local-remote/setup-mac.sh --host msi-damp --user alice --ip 100.x.y.z --port 22
+bash local-remote/setup-mac.sh --host damp-host --user alice --ip 100.x.y.z --port 22
 ```
 
 Verify everything wired up:
@@ -229,7 +229,7 @@ No ngrok, no Cloudflare Tunnel, no public exposure. Just your private tailnet.
 
 ## Keeping the remote awake
 
-If the remote is a laptop (e.g., an MSI Thin running Windows + WSL2), it may
+If the remote is a laptop (e.g., a Windows laptop running WSL2), it may
 suspend when idle. To prevent this **when plugged in**, run in PowerShell
 (Admin) on the remote:
 
@@ -247,7 +247,7 @@ vmIdleTimeout=-1
 ```
 
 With `systemd=true` in WSL2, Docker, sshd, and Tailscale auto-start on reboot.
-See [REMOTE.md](REMOTE.md#mantener-la-msi-despierta-que-no-se-duerma) for
+See [REMOTE.md](REMOTE.md#mantener-la-remote host-despierta-que-no-se-duerma) for
 full details, including Wake-on-LAN notes.
 
 ---
@@ -261,7 +261,7 @@ full details, including Wake-on-LAN notes.
 | `HTTP 503` on a CI4 project | Missing `writable/` dir; `damp-adopt` creates it, or see [REMOTE.md](REMOTE.md) |
 | `Failed opening required .../vendor/...` | Missing dependencies; run `damp-adopt` (step 4) or `composer install` on the remote |
 | Intermittent timeouts / `HTTP 000` | The remote may have gone to sleep; check with `nc -z <IP> 22` |
-| `damp-remote` says "cannot SSH" | Key not copied yet: `ssh-copy-id msi-damp` |
+| `damp-remote` says "cannot SSH" | Key not copied yet: `ssh-copy-id damp-host` |
 
 For the full troubleshooting table and diagnostic commands, see
 [REMOTE.md](REMOTE.md#troubleshooting).
@@ -272,7 +272,7 @@ For the full troubleshooting table and diagnostic commands, see
 
 | File | What it does |
 |------|-------------|
-| [`setup-msi.sh`](setup-msi.sh) | Bootstrap the **remote host** (sshd, docker, repo, .env) |
+| [`setup-remote.sh`](setup-remote.sh) | Bootstrap the **remote host** (sshd, docker, repo, .env) |
 | [`setup-mac.sh`](setup-mac.sh) | Onboard your **Mac** (deps, SSH, DNS, TLS, damp-remote) |
 | [`damp-adopt`](damp-adopt) | Adopt a **project** on the remote, end-to-end, idempotent |
 | [`damp-remote`](damp-remote) | Run any `damp` command on the **remote** over SSH |

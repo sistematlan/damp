@@ -3,7 +3,7 @@
 #  damp-remote — Run DAMP on a remote host over SSH
 # -------------------------------------------------------------
 #  Use case: edit code locally (Mac), run the DAMP stack on a
-#  beefier remote machine (e.g. an MSI box with 32GB RAM running
+#  beefier remote machine (e.g. a remote host box with 32GB RAM running
 #  Debian/WSL2 + Docker Engine). This wrapper forwards any DAMP
 #  command to the remote, so from the Mac you can do:
 #
@@ -17,13 +17,13 @@
 #    2. ~/.config/damp-remote/config
 #
 #  Required settings:
-#    DAMP_REMOTE_HOST   SSH host/alias of the MSI       (e.g. msi-damp)
-#    DAMP_REMOTE_DIR    Path to the damp repo on the MSI (e.g. ~/sourcecode/damp)
+#    DAMP_REMOTE_HOST   SSH host/alias of the remote host       (e.g. damp-host)
+#    DAMP_REMOTE_DIR    Path to the damp repo on the remote host (e.g. ~/sourcecode/damp)
 #
 #  Optional settings:
 #    DAMP_REMOTE_USER   SSH user (if not encoded in HOST/ssh config)
 #    DAMP_REMOTE_PORT   SSH port (default: 22)
-#    DAMP_REMOTE_BIN    Path to the damp binary on the MSI
+#    DAMP_REMOTE_BIN    Path to the damp binary on the remote host
 #                       (default: $DAMP_REMOTE_DIR/core/bin/damp)
 # =============================================================
 set -euo pipefail
@@ -62,8 +62,8 @@ usage() {
   echo -e "  damp-remote import my_db dump.sql   ${DIM}# pipes the local file over SSH${NC}
 "
   echo -e "${BOLD}Configuration${NC} (${CONFIG_FILE}):"
-  echo -e "  DAMP_REMOTE_HOST=msi-damp           ${DIM}# required (ssh alias or user@host)${NC}"
-  echo -e "  DAMP_REMOTE_DIR=~/sourcecode/damp   ${DIM}# required (damp repo path on MSI)${NC}"
+  echo -e "  DAMP_REMOTE_HOST=damp-host           ${DIM}# required (ssh alias or user@host)${NC}"
+  echo -e "  DAMP_REMOTE_DIR=~/sourcecode/damp   ${DIM}# required (damp repo path on remote host)${NC}"
   echo -e "  DAMP_REMOTE_PORT=22                 ${DIM}# optional${NC}"
   echo -e "  DAMP_REMOTE_USER=youruser           ${DIM}# optional${NC}"
 }

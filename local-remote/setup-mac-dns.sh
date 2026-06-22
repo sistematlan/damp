@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # =============================================================
-#  setup-mac-dns.sh — point *.test on the Mac to the remote MSI
+#  setup-mac-dns.sh — point *.test on the Mac to the remote host
 # -------------------------------------------------------------
 #  In the standard (local) DAMP setup, the Mac's dnsmasq resolves
 #  *.test → 127.0.0.1, because Caddy runs locally. When you move
-#  the DAMP stack to the MSI, the browser on the Mac must resolve
-#  *.test → the MSI's IP instead.
+#  the DAMP stack to the remote host, the browser on the Mac must resolve
+#  *.test → the remote host's IP instead.
 #
 #  This script rewrites the existing DAMP dnsmasq entry to point at
-#  the MSI, and (re)installs the /etc/resolver/test file. It is
+#  the remote host, and (re)installs the /etc/resolver/test file. It is
 #  idempotent and can be reverted with: --revert (back to 127.0.0.1).
 #
 #  Usage:
-#    ./setup-mac-dns.sh 192.168.68.42      # point *.test → MSI IP
+#    ./setup-mac-dns.sh 192.168.68.42      # point *.test → remote host IP
 #    ./setup-mac-dns.sh --revert           # point *.test → 127.0.0.1
 #    ./setup-mac-dns.sh --status           # show current target
 #
@@ -67,7 +67,7 @@ EOF
   echo -e "${GREEN}✔ Wrote ${DAMP_CONF} → *.${TLD} = ${ip}${NC}"
 
   # Ensure the macOS resolver for this TLD exists (queries .test via 127.0.0.1
-  # dnsmasq, which then answers with the MSI IP from the record above).
+  # dnsmasq, which then answers with the remote host IP from the record above).
   if [ ! -f "$RESOLVER_FILE" ] || ! grep -q "127.0.0.1" "$RESOLVER_FILE" 2>/dev/null; then
     echo -e "${DIM}Installing ${RESOLVER_FILE} (requires sudo)...${NC}"
     sudo mkdir -p /etc/resolver
@@ -95,7 +95,7 @@ case "${1:-}" in
     cat <<EOF
 ${BOLD}setup-mac-dns.sh${NC} — point *.${TLD} on the Mac to the DAMP host
 
-  ./setup-mac-dns.sh <MSI_IP>   Point *.${TLD} → MSI IP (remote mode)
+  ./setup-mac-dns.sh <REMOTE_IP>   Point *.${TLD} → remote host IP (remote mode)
   ./setup-mac-dns.sh --revert   Point *.${TLD} → 127.0.0.1 (local mode)
   ./setup-mac-dns.sh --status   Show current target
 EOF
