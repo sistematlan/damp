@@ -833,9 +833,9 @@ EOF
   # 3. Add host entry (Linux/WSL)
   if ! grep -q "127.0.0.1.*$domain" /etc/hosts 2>/dev/null; then
     echo -e "${DIM}Adding ${domain} to /etc/hosts (requires sudo)...${NC}"
-    if ! sudo sh -c "echo '127.0.0.1   $domain' >> /etc/hosts" 2>/dev/null; then
+    if ! sudo sh -c "printf '\n127.0.0.1   $domain\n' >> /etc/hosts" 2>/dev/null; then
       echo -e "${YELLOW}Could not update /etc/hosts. Run manually:${NC}"
-      echo -e "  sudo sh -c \"echo '127.0.0.1   ${domain}' >> /etc/hosts\""
+      echo -e "  sudo sh -c \"printf '\\\\n127.0.0.1   ${domain}\\\\n' >> /etc/hosts\""
     fi
   fi
 
@@ -935,7 +935,7 @@ case "${1:-help}" in
     if grep -q "127.0.0.1.*$domain" /etc/hosts 2>/dev/null; then
       echo -e "${YELLOW}$domain already exists in /etc/hosts${NC}"
     else
-      sudo sh -c "echo '127.0.0.1   $domain' >> /etc/hosts"
+      sudo sh -c "printf '\n127.0.0.1   $domain\n' >> /etc/hosts"
       echo -e "${GREEN}$domain added to /etc/hosts${NC}"
     fi
     sync_windows_host "$domain"
