@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -29,7 +30,7 @@ type PostgresClient struct {
 
 func NewDatabaseClient(host, password string) *DatabaseClient {
 	return &DatabaseClient{
-		dsn: fmt.Sprintf("root:%s@tcp(%s:3306)/", password, host),
+		dsn: fmt.Sprintf("root:%s@tcp(%s:3306)/?timeout=2s&readTimeout=2s&writeTimeout=2s", password, host),
 	}
 }
 
@@ -59,13 +60,19 @@ var systemPGDBs = map[string]bool{
 // ── MySQL ─────────────────────────────────────────────────
 
 func (d *DatabaseClient) ListDatabases() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return d.ListDatabasesContext(ctx)
+}
+
+func (d *DatabaseClient) ListDatabasesContext(ctx context.Context) ([]string, error) {
 	db, err := d.connect()
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
 
-	rows, err := db.Query("SHOW DATABASES")
+	rows, err := db.QueryContext(ctx, "SHOW DATABASES")
 	if err != nil {
 		return nil, err
 	}
@@ -123,13 +130,13 @@ func (d *DatabaseClient) DumpDatabase(name string, outputPath string) error {
 	password := credParts[1]
 
 	// Use docker exec with environment variable to avoid password in process list (B18)
-	cmd := exec.Command("docker", "exec", "-e", "MYSQL_PWD="+password, "damp-db", "mysqldump", 
-		"-uroot", 
-		"--single-transaction", 
-		"--routines", 
+	cmd := exec.Command("docker", "exec", "-e", "MYSQL_PWD="+password, "damp-db", "mysqldump",
+		"-uroot",
+		"--single-transaction",
+		"--routines",
 		"--triggers",
 		name)
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("mysqldump failed: %w\nOutput: %s", err, string(output))
@@ -149,13 +156,19 @@ func (p *PostgresClient) connectMaintenance() (*sql.DB, error) {
 }
 
 func (p *PostgresClient) ListDatabases() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return p.ListDatabasesContext(ctx)
+}
+
+func (p *PostgresClient) ListDatabasesContext(ctx context.Context) ([]string, error) {
 	db, err := p.connectMaintenance()
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
 
-	rows, err := db.Query("SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname")
+	rows, err := db.QueryContext(ctx, "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname")
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +219,7 @@ type RedisInfo struct {
 }
 
 func GetRedisInfo(host string) RedisInfo {
-	conn, err := net.DialTimeout("tcp", host+":6379", 2*time.Second)
+	conn, err := net.DialTimeout("tcp", host+":6379", 750*time.Millisecond)
 	if err != nil {
 		return RedisInfo{Connected: false}
 	}
@@ -214,7 +227,7 @@ func GetRedisInfo(host string) RedisInfo {
 
 	info := RedisInfo{Connected: true}
 
-	conn.SetDeadline(time.Now().Add(2 * time.Second))
+	conn.SetDeadline(time.Now().Add(750 * time.Millisecond))
 	fmt.Fprintf(conn, "*2\r\n$4\r\nINFO\r\n$3\r\nall\r\n")
 
 	scanner := bufio.NewScanner(conn)

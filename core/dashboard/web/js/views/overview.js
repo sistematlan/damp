@@ -49,6 +49,40 @@ function renderServiceGrid(services) {
   }).join('');
 }
 
+function formatRuntimeBytes(bytes) {
+  if (!bytes) return '0 MiB';
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GiB';
+  return (bytes / 1048576).toFixed(1) + ' MiB';
+}
+
+function renderRuntimeObservability(data, containers) {
+  var runtime = data.runtime || {};
+  var measured = containers.filter(function(c) { return c.resources; }).sort(function(a, b) {
+    return b.resources.memory_usage - a.resources.memory_usage;
+  });
+  var rows = measured.map(function(c) {
+    var r = c.resources;
+    var budget = r.memory_limited ? formatRuntimeBytes(r.memory_limit) : t('unbounded');
+    var percent = r.memory_limited ? r.memory_percent.toFixed(0) + '%' : '—';
+    return '<div class="runtime-row pressure-' + r.pressure + '">' +
+      '<span class="runtime-name">' + c.name + '</span>' +
+      '<span>' + formatRuntimeBytes(r.memory_usage) + ' / ' + budget + '</span>' +
+      '<span>' + percent + '</span>' +
+      '<span>' + r.cpu_percent.toFixed(1) + '% CPU</span>' +
+      '<span>' + r.pids + ' PIDs</span>' +
+    '</div>';
+  }).join('');
+  if (!rows) rows = '<div class="empty-text">' + t('noRuntimeSamples') + '</div>';
+  return '<div class="card fade-in runtime-observability">' +
+    '<div class="card-header"><span class="card-title">' + t('runtimeHealth') + '</span>' +
+      '<span class="runtime-latency">API ' + (data.response_time_ms || 0) + ' ms</span></div>' +
+    '<div class="runtime-summary">' +
+      '<strong>' + formatRuntimeBytes(runtime.memory_usage || 0) + '</strong> ' + t('containerMemory') +
+      '<span>' + (runtime.limited_containers || 0) + '/' + (runtime.running_containers || 0) + ' ' + t('bounded') + '</span>' +
+      '<span class="' + ((runtime.warnings || 0) ? 'runtime-alert' : '') + '">' + (runtime.warnings || 0) + ' ' + t('warnings') + '</span>' +
+    '</div><div class="runtime-list">' + rows + '</div></div>';
+}
+
 async function renderOverview(el) {
   // Only show loading if the view is empty
   if (!el.innerHTML || el.innerHTML.includes('loading') || el.innerHTML.includes('empty')) {
@@ -74,6 +108,8 @@ async function renderOverview(el) {
       el.querySelector('.db-grid').innerHTML = allDbs.map(function(db) {
         return '<div class="db-card"><span>' + db + '</span></div>';
       }).join('');
+      var runtimeEl = el.querySelector('.runtime-observability');
+      if (runtimeEl) runtimeEl.outerHTML = renderRuntimeObservability(data, allContainers);
       return;
     }
 
@@ -84,6 +120,8 @@ async function renderOverview(el) {
         renderStatMini(projects.length, t('projects'), 'projects-stat') +
         renderStatMini(allDbs.length, t('databases'), 'dbs-stat') +
       '</div>' +
+
+      renderRuntimeObservability(data, allContainers) +
 
       '<div class="card fade-in p-16 rounded-16 bg-subtle">' +
         '<div class="card-header mb-12">' +

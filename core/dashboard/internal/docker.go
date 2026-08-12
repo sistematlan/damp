@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,16 +27,65 @@ func dialDocker() (net.Conn, error) {
 }
 
 type DockerClient struct {
-	httpClient *http.Client
+	httpClient     *http.Client
+	resourceMu     sync.RWMutex
+	resourceCache  map[string]*ContainerResources
+	runtimeSummary RuntimeSummary
+	refreshing     bool
 }
 
 type ContainerInfo struct {
-	Name     string `json:"name"`
-	Status   string `json:"status"`
-	State    string `json:"state"`
-	Image    string `json:"image"`
-	IsDamp   bool   `json:"is_damp"`
-	HostPath string `json:"host_path,omitempty"` // New field
+	Name      string              `json:"name"`
+	Status    string              `json:"status"`
+	State     string              `json:"state"`
+	Image     string              `json:"image"`
+	IsDamp    bool                `json:"is_damp"`
+	HostPath  string              `json:"host_path,omitempty"` // New field
+	Resources *ContainerResources `json:"resources,omitempty"`
+}
+
+type ContainerResources struct {
+	MemoryUsage   uint64  `json:"memory_usage"`
+	MemoryLimit   uint64  `json:"memory_limit"`
+	MemoryPercent float64 `json:"memory_percent"`
+	CPUPercent    float64 `json:"cpu_percent"`
+	PIDs          uint64  `json:"pids"`
+	MemoryLimited bool    `json:"memory_limited"`
+	SwapLimited   bool    `json:"swap_limited"`
+	Pressure      string  `json:"pressure"`
+}
+
+type RuntimeSummary struct {
+	MemoryUsage       uint64    `json:"memory_usage"`
+	MemoryLimit       uint64    `json:"memory_limit"`
+	RunningContainers int       `json:"running_containers"`
+	LimitedContainers int       `json:"limited_containers"`
+	Warnings          int       `json:"warnings"`
+	SampledAt         time.Time `json:"sampled_at"`
+}
+
+func effectiveMemoryUsage(usage, inactiveFile, cache uint64) uint64 {
+	reclaimable := inactiveFile
+	if reclaimable == 0 {
+		reclaimable = cache
+	}
+	if reclaimable < usage {
+		return usage - reclaimable
+	}
+	return usage
+}
+
+func memoryPressure(memoryPercent float64, limited bool) string {
+	if !limited {
+		return "unbounded"
+	}
+	if memoryPercent >= 90 {
+		return "critical"
+	}
+	if memoryPercent >= 75 {
+		return "warning"
+	}
+	return "ok"
 }
 
 func NewDockerClient() (*DockerClient, error) {
@@ -53,16 +103,187 @@ func NewDockerClient() (*DockerClient, error) {
 	}
 	resp.Body.Close()
 
-	return &DockerClient{httpClient: client}, nil
+	return &DockerClient{httpClient: client, resourceCache: make(map[string]*ContainerResources)}, nil
 }
 
 func (d *DockerClient) dockerGet(path string) ([]byte, error) {
-	resp, err := d.httpClient.Get("http://localhost" + path)
+	return d.dockerGetContext(context.Background(), path)
+}
+
+func (d *DockerClient) dockerGetContext(ctx context.Context, path string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost"+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := d.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("docker API error %d: %s", resp.StatusCode, string(body))
+	}
 	return io.ReadAll(resp.Body)
+}
+
+func (d *DockerClient) containerResources(ctx context.Context, name string) (*ContainerResources, error) {
+	statsData, err := d.dockerGetContext(ctx, "/containers/"+name+"/stats?stream=false")
+	if err != nil {
+		return nil, err
+	}
+	var stats struct {
+		MemoryStats struct {
+			Usage uint64 `json:"usage"`
+			Limit uint64 `json:"limit"`
+			Stats struct {
+				InactiveFile uint64 `json:"inactive_file"`
+				Cache        uint64 `json:"cache"`
+			} `json:"stats"`
+		} `json:"memory_stats"`
+		CPUStats struct {
+			CPUUsage struct {
+				TotalUsage  uint64   `json:"total_usage"`
+				PercpuUsage []uint64 `json:"percpu_usage"`
+			} `json:"cpu_usage"`
+			SystemCPUUsage uint64 `json:"system_cpu_usage"`
+			OnlineCPUs     uint64 `json:"online_cpus"`
+		} `json:"cpu_stats"`
+		PreCPUStats struct {
+			CPUUsage struct {
+				TotalUsage uint64 `json:"total_usage"`
+			} `json:"cpu_usage"`
+			SystemCPUUsage uint64 `json:"system_cpu_usage"`
+		} `json:"precpu_stats"`
+		PidsStats struct {
+			Current uint64 `json:"current"`
+		} `json:"pids_stats"`
+	}
+	if err := json.Unmarshal(statsData, &stats); err != nil {
+		return nil, fmt.Errorf("decode stats for %s: %w", name, err)
+	}
+
+	inspectData, err := d.dockerGetContext(ctx, "/containers/"+name+"/json")
+	if err != nil {
+		return nil, err
+	}
+	var inspect struct {
+		HostConfig struct {
+			Memory     int64 `json:"Memory"`
+			MemorySwap int64 `json:"MemorySwap"`
+		} `json:"HostConfig"`
+	}
+	if err := json.Unmarshal(inspectData, &inspect); err != nil {
+		return nil, fmt.Errorf("decode limits for %s: %w", name, err)
+	}
+
+	usage := effectiveMemoryUsage(stats.MemoryStats.Usage, stats.MemoryStats.Stats.InactiveFile, stats.MemoryStats.Stats.Cache)
+	limit := uint64(0)
+	if inspect.HostConfig.Memory > 0 {
+		limit = uint64(inspect.HostConfig.Memory)
+	}
+	memoryPercent := float64(0)
+	if limit > 0 {
+		memoryPercent = float64(usage) / float64(limit) * 100
+	}
+	cpuPercent := float64(0)
+	cpuDelta := stats.CPUStats.CPUUsage.TotalUsage - stats.PreCPUStats.CPUUsage.TotalUsage
+	systemDelta := stats.CPUStats.SystemCPUUsage - stats.PreCPUStats.SystemCPUUsage
+	cores := stats.CPUStats.OnlineCPUs
+	if cores == 0 {
+		cores = uint64(len(stats.CPUStats.CPUUsage.PercpuUsage))
+	}
+	if systemDelta > 0 && cpuDelta > 0 && cores > 0 {
+		cpuPercent = float64(cpuDelta) / float64(systemDelta) * float64(cores) * 100
+	}
+	pressure := memoryPressure(memoryPercent, limit > 0)
+	return &ContainerResources{
+		MemoryUsage: usage, MemoryLimit: limit, MemoryPercent: memoryPercent,
+		CPUPercent: cpuPercent, PIDs: stats.PidsStats.Current,
+		MemoryLimited: limit > 0,
+		SwapLimited:   inspect.HostConfig.Memory > 0 && inspect.HostConfig.MemorySwap == inspect.HostConfig.Memory,
+		Pressure:      pressure,
+	}, nil
+}
+
+func (d *DockerClient) attachResources(ctx context.Context, containers []ContainerInfo) RuntimeSummary {
+	summary := RuntimeSummary{SampledAt: time.Now().UTC()}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 6)
+	for i := range containers {
+		if containers[i].State != "running" {
+			continue
+		}
+		summary.RunningContainers++
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			resources, err := d.containerResources(ctx, containers[index].Name)
+			if err != nil {
+				return
+			}
+			containers[index].Resources = resources
+			mu.Lock()
+			defer mu.Unlock()
+			summary.MemoryUsage += resources.MemoryUsage
+			if resources.MemoryLimited {
+				summary.MemoryLimit += resources.MemoryLimit
+				summary.LimitedContainers++
+			}
+			if resources.Pressure == "warning" || resources.Pressure == "critical" {
+				summary.Warnings++
+			}
+		}(i)
+	}
+	wg.Wait()
+	return summary
+}
+
+// resourcesSnapshot keeps Docker's relatively slow stats sampling off the
+// request path. Callers receive the latest immutable sample while a stale
+// cache is refreshed in the background.
+func (d *DockerClient) resourcesSnapshot(containers []ContainerInfo) RuntimeSummary {
+	d.resourceMu.RLock()
+	for i := range containers {
+		if resource := d.resourceCache[containers[i].Name]; resource != nil {
+			containers[i].Resources = resource
+		}
+	}
+	summary := d.runtimeSummary
+	stale := summary.SampledAt.IsZero() || time.Since(summary.SampledAt) >= 5*time.Second
+	refreshing := d.refreshing
+	d.resourceMu.RUnlock()
+
+	if stale && !refreshing {
+		d.resourceMu.Lock()
+		if !d.refreshing {
+			d.refreshing = true
+			copyForSample := append([]ContainerInfo(nil), containers...)
+			go d.refreshResourceCache(copyForSample)
+		}
+		d.resourceMu.Unlock()
+	}
+	return summary
+}
+
+func (d *DockerClient) refreshResourceCache(containers []ContainerInfo) {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	summary := d.attachResources(ctx, containers)
+	cache := make(map[string]*ContainerResources)
+	for i := range containers {
+		if containers[i].Resources != nil {
+			cache[containers[i].Name] = containers[i].Resources
+		}
+	}
+	d.resourceMu.Lock()
+	d.resourceCache = cache
+	d.runtimeSummary = summary
+	d.refreshing = false
+	d.resourceMu.Unlock()
 }
 
 func (d *DockerClient) dockerPost(path string) error {
@@ -124,7 +345,7 @@ func (d *DockerClient) ListContainers(ctx context.Context, onlyDamp bool) ([]Con
 			continue
 		}
 		name := strings.TrimPrefix(c.Names[0], "/")
-		
+
 		// Apply network filter if requested
 		if onlyDamp && !dampContainerNames[name] {
 			continue
@@ -240,17 +461,17 @@ func HandleProjectAction(w http.ResponseWriter, r *http.Request, dc *DockerClien
 	}
 
 	affected, err := dc.ProjectAction(r.Context(), name, action)
-	
+
 	// Smart Start Improvement: If start requested and no containers exist, ensure environment is ready
 	if action == "start" && affected == 0 && err == nil {
 		projectPath := cc.GetProjectPath(name)
-		
+
 		if projectPath == "" {
 			// Tell the frontend we need a path to start this project (it's unlinked)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusPreconditionRequired)
 			json.NewEncoder(w).Encode(map[string]string{
-				"error": "path_required",
+				"error":   "path_required",
 				"message": "Project path unknown. Please link a folder.",
 			})
 			return
@@ -259,15 +480,20 @@ func HandleProjectAction(w http.ResponseWriter, r *http.Request, dc *DockerClien
 		// Ensure database exists before starting (B13 enhancement)
 		// We use a temporary dbClient for this check
 		dbHost := os.Getenv("DB_HOST")
-		if dbHost == "" { dbHost = "damp-db" }
+		if dbHost == "" {
+			dbHost = "damp-db"
+		}
 		dbPass := os.Getenv("DB_ROOT_PASSWORD")
 		dbClient := NewDatabaseClient(dbHost, dbPass)
-		
+
 		dbName := strings.ReplaceAll(name, "-", "_") + "_db"
 		dbs, _ := dbClient.ListDatabases()
 		exists := false
 		for _, d := range dbs {
-			if d == dbName { exists = true; break }
+			if d == dbName {
+				exists = true
+				break
+			}
 		}
 		if !exists {
 			log.Printf("SmartStart: Creating missing database %s for project %s", dbName, name)
@@ -285,7 +511,7 @@ func HandleProjectAction(w http.ResponseWriter, r *http.Request, dc *DockerClien
 				log.Printf("SmartStart: Auto-start project %s successful", name)
 			}
 		}()
-		
+
 		jsonResponse(w, map[string]interface{}{"status": "starting", "action": action, "info": "environment ensured and project starting"})
 		return
 	}
@@ -466,48 +692,81 @@ func HandleStatus(w http.ResponseWriter, r *http.Request, dc *DockerClient, db *
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	started := time.Now()
+	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
 	defer cancel()
 
-	var dockerRunning bool
-	var containers []ContainerInfo
-	var containersErr string
-	if err := dc.Ping(ctx); err == nil {
-		dockerRunning = true
-		if c, err := dc.ListContainers(ctx, false); err == nil {
-			containers = c
-		} else {
-			containersErr = err.Error()
+	type dockerResult struct {
+		running    bool
+		containers []ContainerInfo
+		summary    RuntimeSummary
+		err        string
+	}
+	type dbResult struct {
+		names []string
+		err   string
+	}
+	dockerCh := make(chan dockerResult, 1)
+	mysqlCh := make(chan dbResult, 1)
+	postgresCh := make(chan dbResult, 1)
+	redisCh := make(chan RedisInfo, 1)
+
+	go func() {
+		result := dockerResult{containers: []ContainerInfo{}}
+		if err := dc.Ping(ctx); err != nil {
+			result.err = err.Error()
+			dockerCh <- result
+			return
 		}
-	}
+		result.running = true
+		containers, err := dc.ListContainers(ctx, false)
+		if err != nil {
+			result.err = err.Error()
+			dockerCh <- result
+			return
+		}
+		result.containers = containers
+		result.summary = dc.resourcesSnapshot(result.containers)
+		dockerCh <- result
+	}()
+	go func() {
+		queryCtx, queryCancel := context.WithTimeout(ctx, 750*time.Millisecond)
+		defer queryCancel()
+		names, err := db.ListDatabasesContext(queryCtx)
+		if err != nil {
+			mysqlCh <- dbResult{names: []string{}, err: err.Error()}
+			return
+		}
+		mysqlCh <- dbResult{names: names}
+	}()
+	go func() {
+		queryCtx, queryCancel := context.WithTimeout(ctx, 750*time.Millisecond)
+		defer queryCancel()
+		names, err := pg.ListDatabasesContext(queryCtx)
+		if err != nil {
+			postgresCh <- dbResult{names: []string{}, err: err.Error()}
+			return
+		}
+		postgresCh <- dbResult{names: names}
+	}()
+	go func() { redisCh <- GetRedisInfo(redisHost) }()
 
-	var databases []string
-	var databasesErr string
-	if d, err := db.ListDatabases(); err == nil {
-		databases = d
-	} else {
-		databasesErr = err.Error()
-	}
-
-	var pgDatabases []string
-	var pgDatabasesErr string
-	if p, err := pg.ListDatabases(); err == nil {
-		pgDatabases = p
-	} else {
-		pgDatabasesErr = err.Error()
-	}
-
-	redis := GetRedisInfo(redisHost)
+	docker := <-dockerCh
+	mysql := <-mysqlCh
+	postgres := <-postgresCh
+	redis := <-redisCh
 
 	status := map[string]interface{}{
-		"docker_running":      dockerRunning,
-		"containers":          containers,
-		"containers_error":    containersErr,
-		"databases":           databases,
-		"databases_error":     databasesErr,
-		"postgres_databases":  pgDatabases,
-		"postgres_error":      pgDatabasesErr,
-		"redis":               redis,
+		"docker_running":     docker.running,
+		"containers":         docker.containers,
+		"containers_error":   docker.err,
+		"runtime":            docker.summary,
+		"databases":          mysql.names,
+		"databases_error":    mysql.err,
+		"postgres_databases": postgres.names,
+		"postgres_error":     postgres.err,
+		"redis":              redis,
+		"response_time_ms":   time.Since(started).Milliseconds(),
 	}
 	jsonResponse(w, status)
 }

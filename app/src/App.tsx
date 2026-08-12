@@ -69,15 +69,15 @@ export default function App() {
   }
 
   const dampServices = status.containers.filter((c) => c.is_damp);
-  const allRunning = dampServices.length > 0 && dampServices.every((c) => c.status === "running");
-  const runningCount = dampServices.filter((c) => c.status === "running").length;
+  const allRunning = dampServices.length > 0 && dampServices.every((c) => c.state === "running");
+  const runningCount = dampServices.filter((c) => c.state === "running").length;
 
   return (
     <div className="app">
       <aside className="sidebar">
         <div className="sidebar-brand">
           <h1>DAMP</h1>
-          <span className="brand-ver">v0.3.0</span>
+          <span className="brand-ver">v0.8.0</span>
         </div>
 
         <nav className="nav-group">
@@ -130,7 +130,7 @@ export default function App() {
           <div className="topbar-services">
             {dampServices.map((s) => (
               <div key={s.name} className="service-tag">
-                <div className={`dot ${s.status === "running" ? "running" : "stopped"}`} />
+                <div className={`dot ${s.state === "running" ? "running" : "stopped"}`} />
                 {s.name.replace("damp-", "")}
               </div>
             ))}
@@ -159,7 +159,7 @@ export default function App() {
 
         <footer className="footer">
           <span>{status.docker_running ? t("engineRunning") : t("engineOffline")}</span>
-          <span>DAMP v0.3.0</span>
+          <span>DAMP v0.8.0</span>
         </footer>
       </div>
     </div>

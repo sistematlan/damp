@@ -193,7 +193,7 @@ export default function Projects({ status, projects, templates, onRefresh }: Pro
           const container = status.containers.find(
             (c) => c.name.replace(/-/g, "").startsWith(p.name.replace(/-/g, ""))
           );
-          const isRunning = container?.status === "running";
+          const isRunning = container?.state === "running";
           const hasContainer = !!container;
 
           return (
@@ -226,7 +226,7 @@ export default function Projects({ status, projects, templates, onRefresh }: Pro
                 )}
                 <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p)}>{t("delete")}</button>
                 {!hasContainer && (
-                  <button className="btn btn-sm" onClick={() => handleRemove(p)}>{t("remove")}</button>
+                  <button className="btn btn-sm" onClick={() => handleDelete(p)}>{t("remove")}</button>
                 )}
               </div>
             </div>

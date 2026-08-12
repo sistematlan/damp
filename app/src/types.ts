@@ -1,7 +1,29 @@
 export interface Container {
   name: string;
   status: string;
+  state: string;
   is_damp: boolean;
+  resources?: ContainerResources;
+}
+
+export interface ContainerResources {
+  memory_usage: number;
+  memory_limit: number;
+  memory_percent: number;
+  cpu_percent: number;
+  pids: number;
+  memory_limited: boolean;
+  swap_limited: boolean;
+  pressure: "ok" | "warning" | "critical" | "unbounded";
+}
+
+export interface RuntimeSummary {
+  memory_usage: number;
+  memory_limit: number;
+  running_containers: number;
+  limited_containers: number;
+  warnings: number;
+  sampled_at: string;
 }
 
 export interface Database {
@@ -26,6 +48,8 @@ export interface DampStatus {
   databases: Database[];
   postgres_databases: Database[];
   redis: RedisInfo;
+  runtime: RuntimeSummary;
+  response_time_ms: number;
 }
 
 export interface Project {

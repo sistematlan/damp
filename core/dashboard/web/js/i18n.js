@@ -10,6 +10,12 @@ const translations = {
 
     // Overview
     containersRunning: 'Containers Running',
+    runtimeHealth: 'Runtime health',
+    containerMemory: 'container memory',
+    bounded: 'bounded',
+    warnings: 'warnings',
+    unbounded: 'unbounded',
+    noRuntimeSamples: 'No runtime samples available',
     dampEngine: 'DAMP Engine',
     start: 'Start',
     stop: 'Stop',
@@ -92,6 +98,12 @@ const translations = {
 
     // Overview
     containersRunning: 'Contenedores Activos',
+    runtimeHealth: 'Salud de ejecución',
+    containerMemory: 'memoria en contenedores',
+    bounded: 'con límite',
+    warnings: 'alertas',
+    unbounded: 'sin límite',
+    noRuntimeSamples: 'No hay muestras de ejecución disponibles',
     dampEngine: 'Motor DAMP',
     start: 'Iniciar',
     stop: 'Detener',

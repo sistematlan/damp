@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import type { DampStatus } from "../types";
 import { t } from "../i18n/translations";
 
@@ -9,17 +8,11 @@ interface LogsProps {
 
 export default function Logs({ status }: LogsProps) {
   const containers = status.containers.filter((c) => c.is_damp);
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(() => containers[0]?.name || "");
   const [logs, setLogs] = useState("");
   const [autoScroll, setAutoScroll] = useState(true);
   const [polling, setPolling] = useState(false);
   const viewerRef = useRef<HTMLPreElement>(null);
-
-  useEffect(() => {
-    if (containers.length > 0 && !selected) {
-      setSelected(containers[0].name);
-    }
-  }, [containers]);
 
   useEffect(() => {
     if (!selected || !polling) return;

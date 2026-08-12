@@ -12,6 +12,7 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
 
 # Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+COPY zz-damp.conf /usr/local/etc/php-fpm.d/zz-damp.conf
 
 EXPOSE 9000
 CMD ["php-fpm"]
