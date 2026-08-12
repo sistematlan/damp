@@ -14,6 +14,30 @@ pub struct Container {
     state: String,
     image: String,
     is_damp: bool,
+    #[serde(default)]
+    resources: Option<ContainerResources>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ContainerResources {
+    memory_usage: u64,
+    memory_limit: u64,
+    memory_percent: f64,
+    cpu_percent: f64,
+    pids: u64,
+    memory_limited: bool,
+    swap_limited: bool,
+    pressure: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct RuntimeSummary {
+    memory_usage: u64,
+    memory_limit: u64,
+    running_containers: u64,
+    limited_containers: u64,
+    warnings: u64,
+    sampled_at: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -45,6 +69,8 @@ pub struct DampStatus {
     databases: Vec<Database>,
     postgres_databases: Vec<Database>,
     redis: RedisInfo,
+    runtime: RuntimeSummary,
+    response_time_ms: i64,
 }
 
 #[derive(Deserialize, Debug)]
@@ -54,14 +80,24 @@ struct GoStatus {
     databases: Vec<String>,
     postgres_databases: Vec<String>,
     redis: RedisInfo,
+    #[serde(default)]
+    runtime: RuntimeSummary,
+    #[serde(default)]
+    response_time_ms: i64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Project {
     name: String,
+    #[serde(default)]
     domain: String,
+    #[serde(default)]
     status: String,
     template: String,
+    #[serde(default)]
+    path: String,
+    #[serde(default)]
+    health: String,
 }
 
 fn resolve_damp_path() -> PathBuf {
@@ -177,6 +213,8 @@ async fn get_status() -> Result<DampStatus, String> {
                 databases: mysql_dbs,
                 postgres_databases: pg_dbs,
                 redis: go_status.redis,
+                runtime: go_status.runtime,
+                response_time_ms: go_status.response_time_ms,
             })
         }
         Err(_) => {
@@ -196,6 +234,8 @@ async fn get_status() -> Result<DampStatus, String> {
                     memory: "".to_string(),
                     keys: "".to_string(),
                 },
+                runtime: RuntimeSummary::default(),
+                response_time_ms: 0,
             })
         }
     }
@@ -337,19 +377,19 @@ async fn restart_container(name: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn get_container_logs(name: String, _tail: Option<u32>) -> Result<String, String> {
+async fn service_action(service: String, action: String) -> Result<String, String> {
     let client = reqwest::Client::new();
-    let url = format!("http://localhost:9000/api/containers/{}/logs", name);
-    // Note: Go returns logs as SSE or plain text depending on how it's called.
-    // For a single fetch, we might need a non-streaming endpoint or handle the stream.
-    // The current Go dashboard returns SSE. Let's see if we can just get the tail.
-    
-    // For now, let's keep the Rust implementation of logs if Go only does SSE,
-    // OR update Go to support a plain text log fetch.
-    
-    // Actually, let's stick with the Rust Command for logs for a moment to avoid complexity 
-    // unless we want to implement SSE in the frontend (which is in the backlog!).
-    
+    let url = format!("http://localhost:9000/api/services/{}/{}", service, action);
+    let resp = client.post(&url).send().await.map_err(|e| e.to_string())?;
+    if resp.status().is_success() {
+        Ok(format!("{} {} complete", service, action))
+    } else {
+        Err(resp.text().await.unwrap_or_else(|_| "Service action failed".to_string()))
+    }
+}
+
+#[tauri::command]
+async fn get_container_logs(name: String, _tail: Option<u32>) -> Result<String, String> {
     let docker_bin = get_docker_path();
     let tail_val = _tail.unwrap_or(200);
     Command::new(&docker_bin)
@@ -410,10 +450,10 @@ async fn get_templates() -> Result<Vec<serde_json::Value>, String> {
 }
 
 #[tauri::command]
-async fn create_project(name: String, template: String, path: String) -> Result<String, String> {
+async fn create_project(name: String, template: String, path: Option<String>) -> Result<String, String> {
     let client = reqwest::Client::new();
     let resp = client.post("http://localhost:9000/api/projects")
-        .json(&serde_json::json!({ "name": name, "template": template, "path": path }))
+        .json(&serde_json::json!({ "name": name, "template": template, "path": path.unwrap_or_default() }))
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -459,7 +499,7 @@ async fn delete_project(name: String) -> Result<String, String> {
 #[tauri::command]
 async fn adopt_project(path: String, template: String) -> Result<String, String> {
     // We can reuse the create project logic with the existing path
-    create_project(path.split('/').last().unwrap_or("project").to_string(), template, path).await
+    create_project(path.split('/').last().unwrap_or("project").to_string(), template, Some(path)).await
 }
 
 #[tauri::command]
@@ -584,6 +624,7 @@ pub fn run() {
             start_container,
             stop_container,
             restart_container,
+            service_action,
             get_container_logs,
             open_url,
             get_templates,

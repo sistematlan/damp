@@ -18,6 +18,10 @@ services:
       - MYSQL_USER=root
       - MYSQL_PASSWORD=root
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1.5
+    pids_limit: 256
     networks:
       - damp
 

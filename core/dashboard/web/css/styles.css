@@ -395,6 +395,28 @@ main {
   margin-top: 2px;
 }
 
+/* ── Runtime observability ─────────────────────────── */
+.runtime-observability { margin-bottom: 20px; }
+.runtime-latency { font: 11px 'SF Mono', monospace; color: var(--text-muted); }
+.runtime-summary { display: flex; align-items: baseline; gap: 16px; margin-bottom: 12px; color: var(--text-muted); font-size: 11px; }
+.runtime-summary strong { color: var(--text); font: 700 20px 'SF Mono', monospace; }
+.runtime-alert { color: var(--red); }
+.runtime-list { display: grid; gap: 6px; }
+.runtime-row { display: grid; grid-template-columns: minmax(130px, 1.5fr) 1.5fr .5fr .75fr .6fr; gap: 12px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-left: 2px solid var(--green); border-radius: 6px; background: var(--bg); color: var(--text-secondary); font: 11px 'SF Mono', monospace; }
+.runtime-row.pressure-unbounded { border-left-color: var(--yellow); }
+.runtime-row.pressure-warning { border-left-color: var(--yellow); background: rgba(245, 158, 11, .05); }
+.runtime-row.pressure-critical { border-left-color: var(--red); background: var(--red-glow); }
+.runtime-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 900px) { .runtime-row { grid-template-columns: 1fr 1fr; } }
+
+.action-notice { padding: 8px 10px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 6px; font: 11px 'SF Mono', monospace; }
+.action-notice.success { color: var(--green); background: rgba(16, 185, 129, .06); }
+.action-notice.error { color: var(--red); background: rgba(239, 68, 68, .06); }
+.service-actions { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.service-control-plane { color: var(--text-muted); font: 10px 'SF Mono', monospace; }
+.service-control { min-width: 64px; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* ── Refined Project Cards ────────────────────────── */
 .container-row {
   display: flex;

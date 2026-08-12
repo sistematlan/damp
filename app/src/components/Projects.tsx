@@ -18,6 +18,7 @@ export default function Projects({ status, projects, templates, onRefresh }: Pro
   const [suggestion, setSuggestion] = useState<ProjectSuggestion | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [loading, setLoading] = useState(false);
+  const [busyProject, setBusyProject] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   const tld = status.tld || "test";
@@ -73,18 +74,24 @@ export default function Projects({ status, projects, templates, onRefresh }: Pro
   };
 
   const handleStart = async (p: Project) => {
-    try { await invoke("start_project", { name: p.name }); onRefresh(); }
+    setBusyProject(p.name);
+    try { const result = await invoke<string>("start_project", { name: p.name }); setMessage({ text: result, type: "success" }); onRefresh(); }
     catch (e) { setMessage({ text: String(e), type: "error" }); clearMessage(); }
+    finally { setBusyProject(null); }
   };
 
   const handleStop = async (p: Project) => {
-    try { await invoke("stop_project", { name: p.name }); onRefresh(); }
+    setBusyProject(p.name);
+    try { const result = await invoke<string>("stop_project", { name: p.name }); setMessage({ text: result, type: "success" }); onRefresh(); }
     catch (e) { setMessage({ text: String(e), type: "error" }); clearMessage(); }
+    finally { setBusyProject(null); }
   };
 
   const handleRestart = async (p: Project) => {
-    try { await invoke("restart_project", { name: p.name }); onRefresh(); }
+    setBusyProject(p.name);
+    try { const result = await invoke<string>("restart_project", { name: p.name }); setMessage({ text: result, type: "success" }); onRefresh(); }
     catch (e) { setMessage({ text: String(e), type: "error" }); clearMessage(); }
+    finally { setBusyProject(null); }
   };
 
   const handleDelete = async (p: Project) => {
@@ -190,11 +197,9 @@ export default function Projects({ status, projects, templates, onRefresh }: Pro
         </div>
       ) : (
         projects.map((p) => {
-          const container = status.containers.find(
-            (c) => c.name.replace(/-/g, "").startsWith(p.name.replace(/-/g, ""))
-          );
-          const isRunning = container?.status === "running";
-          const hasContainer = !!container;
+          const isRunning = p.status === "running";
+          const hasContainer = p.status !== "pending";
+          const busy = busyProject === p.name;
 
           return (
             <div key={p.path} className="project-card">
@@ -214,20 +219,17 @@ export default function Projects({ status, projects, templates, onRefresh }: Pro
               </div>
               <div className="project-actions">
                 {isRunning ? (
-                  <button className="btn btn-sm" onClick={() => handleStop(p)}>{t("stop")}</button>
+                  <button className="btn btn-sm" disabled={busy} onClick={() => handleStop(p)}>{busy ? "…" : t("stop")}</button>
                 ) : (
-                  <button className="btn btn-sm btn-primary" onClick={() => handleStart(p)}>{t("start")}</button>
+                  <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => handleStart(p)}>{busy ? "…" : t("start")}</button>
                 )}
                 {isRunning && (
-                  <button className="btn btn-sm" onClick={() => handleRestart(p)}>{t("restart")}</button>
+                  <button className="btn btn-sm" disabled={busy} onClick={() => handleRestart(p)}>{t("restart")}</button>
                 )}
                 {isRunning && (
                   <button className="btn btn-sm btn-primary" onClick={() => handleOpen(p.name)}>{t("open")}</button>
                 )}
                 <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p)}>{t("delete")}</button>
-                {!hasContainer && (
-                  <button className="btn btn-sm" onClick={() => handleRemove(p)}>{t("remove")}</button>
-                )}
               </div>
             </div>
           );

@@ -31,6 +31,29 @@ One command to get a full local development environment with HTTPS, databases, e
 
 Default credentials: `root` / `root` for MySQL and PostgreSQL.
 
+### Runtime profiles and resource safety
+
+DAMP 0.8 starts a deliberately small core by default: Caddy, MySQL, and the
+dashboard. Optional dependencies are enabled only when needed:
+
+```bash
+damp up              # minimal core
+damp up tools        # + PHPMyAdmin
+damp up mail         # + Mailpit
+damp up cache        # + Redis
+damp up postgres     # + PostgreSQL
+damp up full         # every service
+```
+
+Every managed container has RAM, swap, CPU, and PID budgets. A runaway runtime
+is contained instead of forcing the host into swap thrashing. `damp stats` and
+the dashboard's **Runtime health** panel show current consumption and flag
+containers above 75% (warning) or 90% (critical) of their memory budget.
+
+Defaults can be adjusted in `core/.env`. Generated projects also declare their
+budget under `resources` in `Dampfile` and in `docker-compose.yml`. Prefer
+raising a specific project's budget over removing the limits globally.
+
 ## Requirements
 
 - **macOS 12+** — [OrbStack](https://orbstack.dev) (recommended) or [Docker Desktop](https://docker.com)
@@ -191,9 +214,12 @@ damp help              # Show all commands
 
 # Engine
 damp up                # Start DAMP
+damp up full           # Start DAMP plus every optional service
+damp up tools          # Add PHPMyAdmin only (other profiles: mail, cache, postgres)
 damp down              # Stop DAMP
 damp restart           # Restart DAMP
 damp status            # Show service status
+damp stats             # Show per-container CPU, RAM, budget usage, and PIDs
 damp update            # Pull latest version and rebuild
 
 # Projects (Dampfile workflow)

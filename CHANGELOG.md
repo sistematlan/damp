@@ -10,6 +10,20 @@ at `1.0.0`, breaking changes will be reserved for major bumps.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-11
+
+### Added
+- Runtime observability in the web and desktop dashboards: effective container RAM, configured budget, CPU, PIDs, pressure state, aggregate usage, and API latency.
+- `damp stats` for a one-shot terminal view of container resource consumption.
+- Runtime profiles: `minimal` (default), `full`, `postgres`, `cache`, `tools`, and `mail`.
+- Declarative resource budgets in generated Dampfiles and Compose files.
+
+### Changed
+- Core and project containers now have bounded RAM, swap, CPU, and PID budgets by default.
+- MySQL uses a low-memory local-development profile with reduced instrumentation and caches.
+- PHP-FPM uses on-demand workers; Node projects receive a V8 heap ceiling.
+- `/api/status` queries Docker and optional data services concurrently with bounded timeouts, so an offline dependency no longer serially stalls the dashboard.
+
 ## [0.6.1] — 2026-04-30
 
 ### Fixed

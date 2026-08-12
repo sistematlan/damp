@@ -12,18 +12,27 @@
     admin 0.0.0.0:2019
 }
 
+# Snippet imported by every project block.
+# Adds zstd/gzip compression — DataTables 4.7 MB → ~1.2 MB, etc.
+(common) {
+    encode zstd gzip
+}
+
 # ── Dashboard ──────────────────────────────────────────────
 {$DAMP_DOMAIN:damp.test} {
+    import common
     reverse_proxy damp-dashboard:9000
 }
 
 # ── PHPMyAdmin ──────────────────────────────────────────────
 {$PMA_DOMAIN} {
+    import common
     reverse_proxy damp-phpmyadmin:80
 }
 
 # ── Mailpit ─────────────────────────────────────────────────
 {$MAIL_DOMAIN} {
+    import common
     reverse_proxy damp-mailpit:8025
 }
 

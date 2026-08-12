@@ -21,6 +21,7 @@ export default function App() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [lang, setLangState] = useState(initLang());
 
@@ -47,13 +48,14 @@ export default function App() {
     return () => clearInterval(interval);
   }, [refresh]);
 
-  const handlePowerToggle = async (allRunning: boolean) => {
+  const handlePowerToggle = async (anyRunning: boolean) => {
     setActionLoading(true);
+    setActionError(null);
     try {
-      await invoke(allRunning ? "damp_down" : "damp_up");
+      await invoke(anyRunning ? "damp_down" : "damp_up");
       setTimeout(refresh, 2000);
     } catch (e) {
-      console.error(e);
+      setActionError(String(e));
     } finally {
       setActionLoading(false);
     }
@@ -69,38 +71,40 @@ export default function App() {
   }
 
   const dampServices = status.containers.filter((c) => c.is_damp);
-  const allRunning = dampServices.length > 0 && dampServices.every((c) => c.status === "running");
-  const runningCount = dampServices.filter((c) => c.status === "running").length;
+  const allRunning = dampServices.length > 0 && dampServices.every((c) => c.state === "running");
+  const anyRunning = dampServices.some((c) => c.name !== "damp-dashboard" && c.state === "running");
+  const runningCount = dampServices.filter((c) => c.state === "running").length;
 
   return (
     <div className="app">
       <aside className="sidebar">
         <div className="sidebar-brand">
           <h1>DAMP</h1>
-          <span className="brand-ver">v0.3.0</span>
+          <span className="brand-ver">v0.8.0</span>
         </div>
 
         <nav className="nav-group">
           {NAV_ITEMS.map((item) => (
-            <div
+            <button
               key={item.id}
               className={`nav-item ${activeTab === item.id ? "active" : ""}`}
               onClick={() => setActiveTab(item.id)}
             >
               <span className="nav-icon">{item.icon}</span>
               {t(item.id)}
-            </div>
+            </button>
           ))}
         </nav>
 
         <div className="sidebar-footer">
           <button
-            className={`power-btn ${allRunning ? "on" : "off"}`}
-            onClick={() => handlePowerToggle(allRunning)}
+            className={`power-btn ${anyRunning ? "on" : "off"}`}
+            onClick={() => handlePowerToggle(anyRunning)}
             disabled={actionLoading}
           >
-            {allRunning ? t("stopEngine") : t("startEngine")}
+            {anyRunning ? t("stopEngine") : t("startEngine")}
           </button>
+          {actionError && <div className="inline-status error" role="alert">{actionError}</div>}
           <div className="lang-toggle">
             <button
               className={`lang-btn ${lang === "en" ? "active" : ""}`}
@@ -130,7 +134,7 @@ export default function App() {
           <div className="topbar-services">
             {dampServices.map((s) => (
               <div key={s.name} className="service-tag">
-                <div className={`dot ${s.status === "running" ? "running" : "stopped"}`} />
+                <div className={`dot ${s.state === "running" ? "running" : "stopped"}`} />
                 {s.name.replace("damp-", "")}
               </div>
             ))}
@@ -139,7 +143,7 @@ export default function App() {
 
         <div className="content">
           {activeTab === "overview" && (
-            <Overview status={status} projects={projects} onNavigate={setActiveTab} />
+            <Overview status={status} projects={projects} onNavigate={setActiveTab} onRefresh={refresh} />
           )}
           {activeTab === "projects" && (
             <Projects
@@ -159,7 +163,7 @@ export default function App() {
 
         <footer className="footer">
           <span>{status.docker_running ? t("engineRunning") : t("engineOffline")}</span>
-          <span>DAMP v0.3.0</span>
+          <span>DAMP v0.8.0</span>
         </footer>
       </div>
     </div>

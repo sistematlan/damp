@@ -18,6 +18,10 @@ services:
     networks:
       - damp
     restart: unless-stopped
+    mem_limit: ${CADDY_MEMORY_LIMIT:-96m}
+    memswap_limit: ${CADDY_MEMORY_LIMIT:-96m}
+    cpus: ${CADDY_CPU_LIMIT:-0.50}
+    pids_limit: 128
 
   # ── MySQL ────────────────────────────────────────────────────
   db:
@@ -32,6 +36,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./mysql/init-databases.sql:/docker-entrypoint-initdb.d/01-databases.sql:ro
+      - ./mysql/low-memory.cnf:/etc/mysql/conf.d/low-memory.cnf:ro
     networks:
       - damp
     healthcheck:
@@ -40,12 +45,17 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    mem_limit: ${MYSQL_MEMORY_LIMIT:-384m}
+    memswap_limit: ${MYSQL_MEMORY_LIMIT:-384m}
+    cpus: ${MYSQL_CPU_LIMIT:-1.50}
+    pids_limit: 256
 
   # ── PostgreSQL ───────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: damp-postgres
     restart: unless-stopped
+    profiles: [postgres, full]
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: ${DB_ROOT_PASSWORD:-root}
@@ -60,12 +70,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:-256m}
+    memswap_limit: ${POSTGRES_MEMORY_LIMIT:-256m}
+    cpus: ${POSTGRES_CPU_LIMIT:-1.00}
+    pids_limit: 256
 
   # ── Redis ────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: damp-redis
     restart: unless-stopped
+    profiles: [cache, full]
+    command: redis-server --maxmemory ${REDIS_MAXMEMORY:-64mb} --maxmemory-policy allkeys-lru
     ports:
       - "6379:6379"
     networks:
@@ -75,12 +91,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    mem_limit: ${REDIS_MEMORY_LIMIT:-96m}
+    memswap_limit: ${REDIS_MEMORY_LIMIT:-96m}
+    cpus: ${REDIS_CPU_LIMIT:-0.50}
+    pids_limit: 128
 
   # ── PHPMyAdmin ──────────────────────────────────────────────
   phpmyadmin:
     image: phpmyadmin:latest
     container_name: damp-phpmyadmin
     restart: unless-stopped
+    profiles: [tools, full]
     environment:
       PMA_HOST: db
       PMA_PORT: 3306
@@ -93,12 +114,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    mem_limit: ${PMA_MEMORY_LIMIT:-192m}
+    memswap_limit: ${PMA_MEMORY_LIMIT:-192m}
+    cpus: ${PMA_CPU_LIMIT:-1.00}
+    pids_limit: 128
 
   # ── Mailpit (SMTP de desarrollo) ─────────────────────────────
   mailpit:
     image: axllent/mailpit:latest
     container_name: damp-mailpit
     restart: unless-stopped
+    profiles: [mail, full]
     ports:
       - "${MAIL_HTTP_PORT:-8025}:8025"
       - "${MAIL_SMTP_PORT:-1025}:1025"
@@ -106,6 +132,10 @@ services:
       TZ: ${TZ:-America/Mexico_City}
     networks:
       - damp
+    mem_limit: ${MAILPIT_MEMORY_LIMIT:-96m}
+    memswap_limit: ${MAILPIT_MEMORY_LIMIT:-96m}
+    cpus: ${MAILPIT_CPU_LIMIT:-0.50}
+    pids_limit: 128
 
   # ── Dashboard ────────────────────────────────────────────────
   dashboard:
@@ -113,7 +143,7 @@ services:
     container_name: damp-dashboard
     restart: unless-stopped
     ports:
-      - "${DASHBOARD_PORT:-9200}:9000"
+      - "127.0.0.1:${DASHBOARD_PORT:-9200}:9000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/damp:ro
@@ -122,6 +152,7 @@ services:
       - ${HOME}:${HOME}
     environment:
       DAMP_DIR: /damp
+      DASHBOARD_BIND: 0.0.0.0
       DAMP_TLD: ${DAMP_TLD:-test}
       HOST_HOME: ${HOME}
       DB_HOST: damp-db
@@ -131,6 +162,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    mem_limit: ${DASHBOARD_MEMORY_LIMIT:-128m}
+    memswap_limit: ${DASHBOARD_MEMORY_LIMIT:-128m}
+    cpus: ${DASHBOARD_CPU_LIMIT:-1.00}
+    pids_limit: 128
 
 networks:
   damp:

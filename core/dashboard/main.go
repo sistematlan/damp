@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -39,16 +40,40 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		if isLocalOrigin(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
+			if origin != "" && !isLocalOrigin(origin) {
+				http.Error(w, "Origin not allowed", http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if origin != "" && !isLocalOrigin(origin) {
+			http.Error(w, "Origin not allowed", http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isLocalOrigin(origin string) bool {
+	if origin == "" || origin == "tauri://localhost" || origin == "https://tauri.localhost" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	host := u.Hostname()
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 type statusWriter struct {
@@ -127,6 +152,9 @@ func main() {
 	mux.HandleFunc("/api/containers/", func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleContainerAction(w, r, dockerClient)
 	})
+	mux.HandleFunc("/api/services/", func(w http.ResponseWriter, r *http.Request) {
+		internal.HandleServiceAction(w, r, configClient, dockerClient)
+	})
 	mux.HandleFunc("/api/databases", func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleDatabases(w, r, dbClient, pgClient)
 	})
@@ -191,8 +219,12 @@ func main() {
 	// Apply middleware
 	handler := loggingMiddleware(corsMiddleware(recoveryMiddleware(mux)))
 
+	bind := os.Getenv("DASHBOARD_BIND")
+	if bind == "" {
+		bind = "127.0.0.1"
+	}
 	server := &http.Server{
-		Addr:         ":" + port,
+		Addr:         bind + ":" + port,
 		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
@@ -204,7 +236,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		log.Printf("DAMP Dashboard running on http://0.0.0.0:%s", port)
+		log.Printf("DAMP Dashboard running on http://%s:%s", bind, port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Could not listen on %s: %v\n", port, err)
 		}

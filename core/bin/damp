@@ -218,6 +218,14 @@ database:
   create: true
 EOF
   fi
+
+  cat >> "$target/Dampfile" <<EOF
+
+resources:
+  memory: $([ "$ptype" = "node" ] && echo "768m" || echo "512m")
+  cpus: $([ "$ptype" = "node" ] && echo "2.0" || echo "1.5")
+  pids: 256
+EOF
 }
 
 # ── Generate docker-compose.yml from Dampfile config ───────────
@@ -249,6 +257,10 @@ services:
       - ./:/app
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1.5
+    pids_limit: 256
     networks:
       - damp
 
@@ -275,6 +287,10 @@ services:
       - database.default.DBDriver=MySQLi
       - database.default.port=3306
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1.5
+    pids_limit: 256
     networks:
       - damp
 
@@ -288,6 +304,10 @@ services:
     depends_on:
       - app
     restart: unless-stopped
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.5
+    pids_limit: 128
     networks:
       - damp
 
@@ -308,6 +328,10 @@ services:
     environment:
       - CI_ENVIRONMENT=development
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1.5
+    pids_limit: 256
     networks:
       - damp
 
@@ -321,6 +345,10 @@ services:
     depends_on:
       - app
     restart: unless-stopped
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.5
+    pids_limit: 128
     networks:
       - damp
 
@@ -345,6 +373,10 @@ services:
       - MYSQL_USER=root
       - MYSQL_PASSWORD=root
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1.5
+    pids_limit: 256
     networks:
       - damp
 
@@ -367,7 +399,12 @@ services:
     command: sh -c "${node_cmd}"
     environment:
       - NODE_ENV=development
+      - NODE_OPTIONS=--max-old-space-size=512
     restart: unless-stopped
+    mem_limit: 768m
+    memswap_limit: 768m
+    cpus: 2.0
+    pids_limit: 256
     networks:
       - damp
 
@@ -385,6 +422,10 @@ services:
     container_name: ${project}
     hostname: ${project}
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1.5
+    pids_limit: 256
     environment:
       WORDPRESS_DB_HOST: damp-db
       WORDPRESS_DB_USER: root
@@ -447,6 +488,9 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \\
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
+RUN printf '[www]\npm = ondemand\npm.max_children = 5\npm.process_idle_timeout = 10s\npm.max_requests = 500\n' \
+    > /usr/local/etc/php-fpm.d/zz-damp.conf
+
 EXPOSE 9000
 CMD ["php-fpm"]
 EOF
@@ -466,6 +510,9 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \\
     intl pdo_mysql mysqli zip gd exif opcache mbstring
 
 COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
+
+RUN printf '[www]\npm = ondemand\npm.max_children = 5\npm.process_idle_timeout = 10s\npm.max_requests = 500\n' \
+    > /usr/local/etc/php-fpm.d/zz-damp.conf
 
 EXPOSE 9000
 CMD ["php-fpm"]
@@ -822,10 +869,20 @@ setup_project() {
   fi
 
   # 2. Generate Caddy config in projects.d/
+  # The upstream must match the real container_name from the project's
+  # docker-compose.yml (templates use "<project>-app"; for php-fpm/php-legacy
+  # the HTTP listener is the nginx "<project>-web", not the PHP container).
+  local upstream=""
+  if [ -f "$target/docker-compose.yml" ]; then
+    upstream=$(grep -E 'container_name:.*-web' "$target/docker-compose.yml" | head -1 | awk '{print $2}')
+    [ -z "$upstream" ] && upstream=$(grep -m1 'container_name:' "$target/docker-compose.yml" | awk '{print $2}')
+  fi
+  [ -z "$upstream" ] && upstream="$project"
+
   mkdir -p "$PROJECTS_DIR"
   cat > "$PROJECTS_DIR/${project}.caddy" <<EOF
 ${domain} {
-    reverse_proxy ${project}:${proxy_port}
+    reverse_proxy ${upstream}:${proxy_port}
 }
 EOF
   echo -e "${DIM}Caddy config created: projects.d/${project}.caddy${NC}"
@@ -878,7 +935,15 @@ case "${1:-help}" in
   # ── Start ────────────────────────────────────────────────────
   up)
     echo -e "${GREEN}Starting DAMP Core Services...${NC}"
-    docker compose up -d
+    profile="${2:-minimal}"
+    if [ "$profile" = "minimal" ]; then
+      docker compose up -d
+    elif [ "$profile" = "full" ] || [ "$profile" = "postgres" ] || [ "$profile" = "cache" ] || [ "$profile" = "tools" ] || [ "$profile" = "mail" ]; then
+      docker compose --profile "$profile" up -d
+    else
+      echo -e "${RED}Unknown profile '$profile'. Use: minimal, full, postgres, cache, tools, mail.${NC}"
+      exit 1
+    fi
     echo -e "${GREEN}DAMP is running.${NC}"
     echo ""
     
@@ -913,6 +978,14 @@ case "${1:-help}" in
     echo ""
     echo -e "${BOLD}Projects on damp network:${NC}"
     docker network inspect damp --format '{{range .Containers}}  {{.Name}}{{"\n"}}{{end}}' 2>/dev/null | sort
+    ;;
+
+  # ── Runtime resources ────────────────────────────────────────
+  stats)
+    echo -e "${BOLD}DAMP Runtime Resources:${NC}"
+    docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.PIDs}}"
+    echo ""
+    echo -e "${DIM}Containers at or above 75% of their memory budget require attention.${NC}"
     ;;
 
   # ── Logs ─────────────────────────────────────────────────────
@@ -1348,10 +1421,11 @@ case "${1:-help}" in
     echo -e "${BOLD}Usage:${NC} damp <command> [args]"
     echo ""
     echo -e "${BOLD}Services:${NC}"
-    echo "  up              Start DAMP"
+    echo "  up [profile]    Start DAMP (minimal default; full/tools/mail/cache/postgres)"
     echo "  down            Stop DAMP"
     echo "  restart         Restart DAMP"
     echo "  status          Show service status"
+    echo "  stats           Show live CPU, RAM and PID usage"
     echo "  logs [svc]      View logs (optional: specific service)"
     echo "  exec <project>  Execute bash inside project container"
     echo "  reload          Reload Caddy (after changing Caddyfile)"

@@ -15,6 +15,10 @@ services:
     image: wordpress:latest
     container_name: PROJECT_NAME-app
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1.5
+    pids_limit: 256
     environment:
       WORDPRESS_DB_HOST: damp-db
       WORDPRESS_DB_USER: root

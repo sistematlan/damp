@@ -1,0 +1,10 @@
+# DAMP 0.8 development profile: bounded memory, optimized for local workloads.
+[mysqld]
+performance_schema=OFF
+innodb_buffer_pool_size=128M
+innodb_log_buffer_size=16M
+max_connections=40
+table_open_cache=512
+table_definition_cache=512
+temptable_max_ram=32M
+skip_name_resolve=ON
