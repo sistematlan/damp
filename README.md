@@ -386,7 +386,39 @@ damp update
 damp reload
 ```
 
-`damp update` pulls the latest code and rebuilds all services. Always run `damp reload` after updating to apply any Caddy configuration changes.
+`damp update` pulls `main`, rebuilds the dashboard, and recreates the core
+services. Always run `damp reload` afterward to apply Caddy configuration
+changes.
+
+### Upgrading to 0.8
+
+DAMP 0.8 adds bounded runtime resources, observable RAM/CPU/PID usage, runtime
+profiles, response compression, and individual service controls in the web and
+desktop dashboards.
+
+```bash
+damp update
+damp reload
+damp version
+damp stats
+```
+
+The dashboard remains available when the other engine services are stopped, so
+it can act as the local control plane. Its API is exposed on loopback only by
+default. If you previously accessed port `9200` from another machine, use an
+explicit, trusted local tunnel instead of publishing the Docker socket control
+API to the network.
+
+After updating, the minimal core starts Caddy, MySQL, and the dashboard. Start
+optional services from the dashboard or with one of these profiles:
+
+```bash
+damp up postgres
+damp up cache
+damp up tools
+damp up mail
+damp up full
+```
 
 If a new version changes the default TLD or templates, you may also need to run `damp trust` again to update SSL certificates.
 

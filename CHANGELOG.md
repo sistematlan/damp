@@ -10,19 +10,45 @@ at `1.0.0`, breaking changes will be reserved for major bumps.
 
 ## [Unreleased]
 
-## [0.8.0] — 2026-08-11
+## [0.8.0] — 2026-08-12
 
 ### Added
 - Runtime observability in the web and desktop dashboards: effective container RAM, configured budget, CPU, PIDs, pressure state, aggregate usage, and API latency.
 - `damp stats` for a one-shot terminal view of container resource consumption.
 - Runtime profiles: `minimal` (default), `full`, `postgres`, `cache`, `tools`, and `mail`.
 - Declarative resource budgets in generated Dampfiles and Compose files.
+- Individual start/stop controls for Caddy, MySQL, PostgreSQL, Redis,
+  PHPMyAdmin, and Mailpit in both the web and desktop dashboards.
+- Visible action progress and error feedback for service and project controls.
 
 ### Changed
 - Core and project containers now have bounded RAM, swap, CPU, and PID budgets by default.
 - MySQL uses a low-memory local-development profile with reduced instrumentation and caches.
 - PHP-FPM uses on-demand workers; Node projects receive a V8 heap ceiling.
 - `/api/status` queries Docker and optional data services concurrently with bounded timeouts, so an offline dependency no longer serially stalls the dashboard.
+- Caddy responses use Zstandard or gzip compression when supported by the client.
+- Stopping the engine keeps the dashboard running as the local control plane,
+  allowing services to be started again from the UI.
+
+### Fixed
+- Generated Caddy routes now target the actual Compose container name, avoiding
+  `502 Bad Gateway` responses after `damp init`.
+- Project actions now match both single-container and multi-container projects
+  and report partial failures instead of returning a false success.
+- Desktop project creation no longer fails because of a missing optional path.
+- Corrected PHPMyAdmin discovery and service-state counting in the desktop app.
+
+### Security
+- The dashboard binds to loopback by default and Compose publishes it only on
+  `127.0.0.1`.
+- Browser control requests accept only local/Tauri origins, and direct container
+  actions are restricted to containers attached to the DAMP network.
+
+### Upgrade notes
+- Existing installations can upgrade with `damp update`, followed by
+  `damp reload` to apply Caddy configuration changes.
+- The default `minimal` profile starts Caddy, MySQL, and the dashboard. Optional
+  services can be enabled from the dashboard or with `damp up <profile>`.
 
 ## [0.6.1] — 2026-04-30
 
@@ -254,7 +280,8 @@ Initial internal release.
   `create-db`, `drop-db`, `import`, `export`, `new`, `exec`, `trust`,
   `reload`, `add-host`.
 
-[Unreleased]: https://github.com/sistematlan/damp/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/sistematlan/damp/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/sistematlan/damp/releases/tag/v0.8.0
 [0.4.0]: https://github.com/sistematlan/damp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/sistematlan/damp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sistematlan/damp/compare/v0.1.0...v0.2.0
