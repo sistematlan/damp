@@ -389,6 +389,10 @@ func (d *DockerClient) RestartContainer(ctx context.Context, name string) error 
 	return d.dockerPost("/containers/" + name + "/restart")
 }
 
+func belongsToProject(containerName, projectName string) bool {
+	return containerName == projectName || strings.HasPrefix(containerName, projectName+"-")
+}
+
 // Start/stop all containers matching a project prefix (e.g. "myproject-")
 func (d *DockerClient) ProjectAction(ctx context.Context, projectName string, action string) (int, error) {
 	// List ALL containers (including stopped) - not just damp network
@@ -405,11 +409,14 @@ func (d *DockerClient) ProjectAction(ctx context.Context, projectName string, ac
 		return 0, err
 	}
 
-	prefix := projectName + "-"
 	affected := 0
+	var actionErrors []string
 	for _, rc := range rawContainers {
+		if len(rc.Names) == 0 {
+			continue
+		}
 		name := strings.TrimPrefix(rc.Names[0], "/")
-		if !strings.HasPrefix(name, prefix) {
+		if !belongsToProject(name, projectName) {
 			continue
 		}
 		var actionErr error
@@ -421,9 +428,14 @@ func (d *DockerClient) ProjectAction(ctx context.Context, projectName string, ac
 		case "restart":
 			actionErr = d.RestartContainer(ctx, name)
 		}
-		if actionErr == nil {
-			affected++
+		if actionErr != nil {
+			actionErrors = append(actionErrors, name+": "+actionErr.Error())
+			continue
 		}
+		affected++
+	}
+	if len(actionErrors) > 0 {
+		return affected, fmt.Errorf("project action partially failed: %s", strings.Join(actionErrors, "; "))
 	}
 	return affected, nil
 }
@@ -578,6 +590,26 @@ func HandleContainerAction(w http.ResponseWriter, r *http.Request, dc *DockerCli
 
 	name := parts[0]
 	action := parts[1]
+	if !validName.MatchString(name) {
+		jsonError(w, "Invalid container name", http.StatusBadRequest)
+		return
+	}
+	containers, err := dc.ListContainers(r.Context(), true)
+	if err != nil {
+		jsonError(w, "Unable to verify managed container", http.StatusServiceUnavailable)
+		return
+	}
+	managed := false
+	for _, container := range containers {
+		if container.Name == name {
+			managed = true
+			break
+		}
+	}
+	if !managed {
+		jsonError(w, "Container is not managed by DAMP", http.StatusForbidden)
+		return
+	}
 
 	if action == "logs" {
 		handleContainerLogs(w, r, dc, name)
@@ -590,7 +622,6 @@ func HandleContainerAction(w http.ResponseWriter, r *http.Request, dc *DockerCli
 	}
 
 	ctx := r.Context()
-	var err error
 	switch action {
 	case "start":
 		err = dc.StartContainer(ctx, name)

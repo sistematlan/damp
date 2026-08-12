@@ -143,7 +143,7 @@ services:
     container_name: damp-dashboard
     restart: unless-stopped
     ports:
-      - "${DASHBOARD_PORT:-9200}:9000"
+      - "127.0.0.1:${DASHBOARD_PORT:-9200}:9000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/damp:ro
@@ -152,6 +152,7 @@ services:
       - ${HOME}:${HOME}
     environment:
       DAMP_DIR: /damp
+      DASHBOARD_BIND: 0.0.0.0
       DAMP_TLD: ${DAMP_TLD:-test}
       HOST_HOME: ${HOME}
       DB_HOST: damp-db

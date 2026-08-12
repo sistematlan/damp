@@ -89,9 +89,15 @@ struct GoStatus {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Project {
     name: String,
+    #[serde(default)]
     domain: String,
+    #[serde(default)]
     status: String,
     template: String,
+    #[serde(default)]
+    path: String,
+    #[serde(default)]
+    health: String,
 }
 
 fn resolve_damp_path() -> PathBuf {
@@ -371,6 +377,18 @@ async fn restart_container(name: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn service_action(service: String, action: String) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let url = format!("http://localhost:9000/api/services/{}/{}", service, action);
+    let resp = client.post(&url).send().await.map_err(|e| e.to_string())?;
+    if resp.status().is_success() {
+        Ok(format!("{} {} complete", service, action))
+    } else {
+        Err(resp.text().await.unwrap_or_else(|_| "Service action failed".to_string()))
+    }
+}
+
+#[tauri::command]
 async fn get_container_logs(name: String, _tail: Option<u32>) -> Result<String, String> {
     let docker_bin = get_docker_path();
     let tail_val = _tail.unwrap_or(200);
@@ -432,10 +450,10 @@ async fn get_templates() -> Result<Vec<serde_json::Value>, String> {
 }
 
 #[tauri::command]
-async fn create_project(name: String, template: String, path: String) -> Result<String, String> {
+async fn create_project(name: String, template: String, path: Option<String>) -> Result<String, String> {
     let client = reqwest::Client::new();
     let resp = client.post("http://localhost:9000/api/projects")
-        .json(&serde_json::json!({ "name": name, "template": template, "path": path }))
+        .json(&serde_json::json!({ "name": name, "template": template, "path": path.unwrap_or_default() }))
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -481,7 +499,7 @@ async fn delete_project(name: String) -> Result<String, String> {
 #[tauri::command]
 async fn adopt_project(path: String, template: String) -> Result<String, String> {
     // We can reuse the create project logic with the existing path
-    create_project(path.split('/').last().unwrap_or("project").to_string(), template, path).await
+    create_project(path.split('/').last().unwrap_or("project").to_string(), template, Some(path)).await
 }
 
 #[tauri::command]
@@ -606,6 +624,7 @@ pub fn run() {
             start_container,
             stop_container,
             restart_container,
+            service_action,
             get_container_logs,
             open_url,
             get_templates,

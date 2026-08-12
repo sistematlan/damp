@@ -56,6 +56,9 @@ export interface Project {
   name: string;
   path: string;
   template: string;
+  domain: string;
+  status: string;
+  health: string;
 }
 
 export interface Template {

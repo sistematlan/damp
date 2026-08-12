@@ -74,7 +74,7 @@ func (c *ConfigClient) ListTemplates() ([]TemplateInfo, error) {
 		if entry.IsDir() {
 			name := entry.Name()
 			desc := name
-			
+
 			// Try to read description from description.txt (B26)
 			descPath := filepath.Join(dir, name, "description.txt")
 			if data, err := os.ReadFile(descPath); err == nil {
@@ -315,7 +315,7 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 	caddyDir := filepath.Join(c.dampDir, "caddy", "projects.d")
 	os.MkdirAll(caddyDir, 0755)
 	domain := name + "." + dampTLD()
-	
+
 	// Determine target container based on template
 	// frankenphp, wordpress, node, static use 'app' service
 	// php-fpm, php-legacy, php-ancient use 'web' service (nginx)
@@ -323,7 +323,7 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 	if template == "php-fpm" || template == "php-legacy" || template == "php-ancient" {
 		targetContainer = name + "-web:80"
 	}
-	
+
 	caddyConfig := fmt.Sprintf("%s {\n    reverse_proxy %s\n}\n", domain, targetContainer)
 	caddyPath := filepath.Join(caddyDir, name+".caddy")
 	if err := os.WriteFile(caddyPath, []byte(caddyConfig), 0644); err != nil {
@@ -352,7 +352,7 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 		if !filepath.IsAbs(projectPath) {
 			return nil, fmt.Errorf("path must be absolute (e.g. %s/projects/%s)", hostHome(), name)
 		}
-		
+
 		// Resolve symlinks to prevent escaping (B14)
 		if evalPath, err := filepath.EvalSymlinks(projectPath); err == nil {
 			projectPath = evalPath
@@ -401,7 +401,7 @@ func (c *ConfigClient) CreateProject(name, template, projectPath string, dbClien
 				log.Printf("Project %s started successfully", name)
 			}
 		}()
-		
+
 		status = "starting"
 		output = fmt.Sprintf("Project '%s' is starting at https://%s. Wait 30 seconds then click the domain link or refresh the page.", name, domain)
 	}
@@ -489,7 +489,7 @@ func (c *ConfigClient) ListProjectsFromCaddy(dc *DockerClient) ([]ProjectStatus,
 
 		health := "ok"
 		projectPath := ""
-		
+
 		// Check Registry link
 		if reg, ok := registryMap[projectName]; ok {
 			projectPath = reg.Path
@@ -517,16 +517,22 @@ func (c *ConfigClient) ListProjectsFromCaddy(dc *DockerClient) ([]ProjectStatus,
 		for _, c := range containers {
 			if c.Name == projectName || strings.HasPrefix(c.Name, projectName+"-") {
 				hasContainers = true
-				if c.HostPath != "" { detectedPath = c.HostPath }
+				if c.HostPath != "" {
+					detectedPath = c.HostPath
+				}
 
 				switch c.State {
 				case "running":
 					status = "running"
 					break containerLoop
 				case "created", "restarting":
-					if status != "running" { status = "starting" }
+					if status != "running" {
+						status = "starting"
+					}
 				default:
-					if status != "running" { status = "stopped" }
+					if status != "running" {
+						status = "stopped"
+					}
 				}
 			}
 		}
@@ -564,7 +570,7 @@ func (c *ConfigClient) ListProjectsFromCaddy(dc *DockerClient) ([]ProjectStatus,
 func (c *ConfigClient) DeleteProject(name string, dc *DockerClient, dbClient *DatabaseClient) (string, error) {
 	dumpPath := ""
 	var lastErr error
-	
+
 	// 1. Stop containers
 	if dc != nil {
 		ctx := context.Background()
@@ -582,7 +588,7 @@ func (c *ConfigClient) DeleteProject(name string, dc *DockerClient, dbClient *Da
 	// 3. Backup database before dropping
 	dbName := strings.ReplaceAll(name, "-", "_") + "_db"
 	projectPath := c.GetProjectPath(name)
-	
+
 	if dbClient != nil && projectPath != "" {
 		// Check if database exists and has data
 		dbs, _ := dbClient.ListDatabases()
@@ -593,12 +599,12 @@ func (c *ConfigClient) DeleteProject(name string, dc *DockerClient, dbClient *Da
 				break
 			}
 		}
-		
+
 		if dbExists {
 			timestamp := time.Now().Format("20060102_150405")
 			dumpFileName := fmt.Sprintf("%s_db_dump_%s.sql", name, timestamp)
 			dumpPath = filepath.Join(projectPath, dumpFileName)
-			
+
 			if err := dbClient.DumpDatabase(dbName, dumpPath); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to dump database %s: %v\n", dbName, err)
 				dumpPath = "" // Don't report path if dump failed
@@ -644,15 +650,15 @@ func HandleDeleteProject(w http.ResponseWriter, r *http.Request, cc *ConfigClien
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
+
 	response := map[string]string{
-		"status": "deleted", 
-		"name": name,
+		"status": "deleted",
+		"name":   name,
 	}
 	if dumpPath != "" {
 		response["dump"] = dumpPath
 	}
-	
+
 	jsonResponse(w, response)
 }
 
@@ -707,7 +713,7 @@ func addHostEntry(domain string) {
 		script := fmt.Sprintf(`
 			$path = "C:\Windows\System32\drivers\etc\hosts"
 			if (!(Get-Content $path | Select-String -Pattern "%s")) {
-				Add-Content -Path $path -Value "` + "`n" + `%s" -ErrorAction SilentlyContinue
+				Add-Content -Path $path -Value "`+"`n"+`%s" -ErrorAction SilentlyContinue
 			}
 		`, regexp.QuoteMeta(domain), entry)
 		_ = exec.Command("powershell", "-NoProfile", "-Command", script).Run()
@@ -783,7 +789,7 @@ func HandleBrowse(w http.ResponseWriter, r *http.Request) {
 	// Allowed base paths
 	homeParent := filepath.Dir(home)
 	cleanPath := filepath.Clean(dirPath)
-	
+
 	// Resolve symlinks to detect hidden traversals (B15)
 	resolvedPath, err := filepath.EvalSymlinks(cleanPath)
 	if err == nil {
@@ -835,6 +841,83 @@ func HandleBrowse(w http.ResponseWriter, r *http.Request) {
 
 // ── Engine controls ──────────────────────────────────────
 
+type ServiceDefinition struct {
+	ComposeName   string
+	ContainerName string
+	Profile       string
+	Controllable  bool
+}
+
+var managedServices = map[string]ServiceDefinition{
+	"caddy":      {ComposeName: "caddy", ContainerName: "damp-caddy", Controllable: true},
+	"mysql":      {ComposeName: "db", ContainerName: "damp-db", Controllable: true},
+	"postgres":   {ComposeName: "postgres", ContainerName: "damp-postgres", Profile: "postgres", Controllable: true},
+	"redis":      {ComposeName: "redis", ContainerName: "damp-redis", Profile: "cache", Controllable: true},
+	"phpmyadmin": {ComposeName: "phpmyadmin", ContainerName: "damp-phpmyadmin", Profile: "tools", Controllable: true},
+	"mailpit":    {ComposeName: "mailpit", ContainerName: "damp-mailpit", Profile: "mail", Controllable: true},
+	"dashboard":  {ComposeName: "dashboard", ContainerName: "damp-dashboard", Controllable: false},
+}
+
+func (c *ConfigClient) composeServiceUp(service ServiceDefinition) (string, error) {
+	args := []string{"compose"}
+	if service.Profile != "" {
+		args = append(args, "--profile", service.Profile)
+	}
+	args = append(args, "up", "-d", service.ComposeName)
+	cmd := exec.Command("docker", args...)
+	cmd.Dir = c.dampDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(out))
+	}
+	return string(out), nil
+}
+
+func HandleServiceAction(w http.ResponseWriter, r *http.Request, cc *ConfigClient, dc *DockerClient) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	path := strings.TrimPrefix(r.URL.Path, "/api/services/")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) != 2 {
+		jsonError(w, "Invalid service action", http.StatusBadRequest)
+		return
+	}
+	service, ok := managedServices[parts[0]]
+	if !ok {
+		jsonError(w, "Unknown service: "+parts[0], http.StatusNotFound)
+		return
+	}
+	if !service.Controllable {
+		jsonError(w, "The dashboard is the control plane and cannot stop itself", http.StatusConflict)
+		return
+	}
+
+	action := parts[1]
+	var output string
+	var err error
+	switch action {
+	case "start":
+		output, err = cc.composeServiceUp(service)
+	case "stop":
+		err = dc.StopContainer(r.Context(), service.ContainerName)
+	case "restart":
+		err = dc.RestartContainer(r.Context(), service.ContainerName)
+		if err != nil {
+			output, err = cc.composeServiceUp(service)
+		}
+	default:
+		jsonError(w, "Unknown action: "+action, http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]string{"status": "ok", "service": parts[0], "action": action, "output": output})
+}
+
 func (c *ConfigClient) EngineUp() (string, error) {
 	cmd := exec.Command("docker", "compose", "up", "-d")
 	cmd.Dir = c.dampDir
@@ -846,7 +929,8 @@ func (c *ConfigClient) EngineUp() (string, error) {
 }
 
 func (c *ConfigClient) EngineDown() (string, error) {
-	cmd := exec.Command("docker", "compose", "down")
+	// Keep the dashboard alive: it is the control plane needed to start services again.
+	cmd := exec.Command("docker", "compose", "--profile", "full", "stop", "caddy", "db", "postgres", "redis", "phpmyadmin", "mailpit")
 	cmd.Dir = c.dampDir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

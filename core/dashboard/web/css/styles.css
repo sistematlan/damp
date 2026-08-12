@@ -409,6 +409,14 @@ main {
 .runtime-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 900px) { .runtime-row { grid-template-columns: 1fr 1fr; } }
 
+.action-notice { padding: 8px 10px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 6px; font: 11px 'SF Mono', monospace; }
+.action-notice.success { color: var(--green); background: rgba(16, 185, 129, .06); }
+.action-notice.error { color: var(--red); background: rgba(239, 68, 68, .06); }
+.service-actions { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.service-control-plane { color: var(--text-muted); font: 10px 'SF Mono', monospace; }
+.service-control { min-width: 64px; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* ── Refined Project Cards ────────────────────────── */
 .container-row {
   display: flex;

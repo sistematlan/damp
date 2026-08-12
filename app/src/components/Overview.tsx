@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { DampStatus, Project } from "../types";
 
@@ -5,16 +6,17 @@ interface OverviewProps {
   status: DampStatus;
   projects: Project[];
   onNavigate: (view: string) => void;
+  onRefresh: () => void;
 }
 
-const SERVICE_INFO: Record<string, { label: string; detail: string; port: string; url?: string }> = {
-  "damp-caddy": { label: "Caddy", detail: "Reverse Proxy / HTTPS", port: "443", url: "dashboard" },
-  "damp-dashboard": { label: "Dashboard", detail: "Go API / Backend", port: "9000" },
-  "damp-db": { label: "MySQL 8.4", detail: "Database", port: "3306" },
-  "damp-postgres": { label: "PostgreSQL 16", detail: "Database", port: "5432" },
-  "damp-redis": { label: "Redis 7", detail: "Cache", port: "6379" },
-  "damp-mailpit": { label: "Mailpit", detail: "SMTP Testing", port: "1025", url: "mail" },
-  "damp-pma": { label: "PHPMyAdmin", detail: "DB Manager", port: "8080", url: "pma" },
+const SERVICE_INFO: Record<string, { id: string; label: string; detail: string; port: string; url?: string; controllable?: boolean }> = {
+  "damp-caddy": { id: "caddy", label: "Caddy", detail: "Reverse Proxy / HTTPS", port: "443", url: "dashboard", controllable: true },
+  "damp-dashboard": { id: "dashboard", label: "Dashboard", detail: "Control plane", port: "9000" },
+  "damp-db": { id: "mysql", label: "MySQL 8.4", detail: "Database", port: "3306", controllable: true },
+  "damp-postgres": { id: "postgres", label: "PostgreSQL 16", detail: "Database", port: "5432", controllable: true },
+  "damp-redis": { id: "redis", label: "Redis 7", detail: "Cache", port: "6379", controllable: true },
+  "damp-mailpit": { id: "mailpit", label: "Mailpit", detail: "SMTP Testing", port: "1025", url: "mail", controllable: true },
+  "damp-phpmyadmin": { id: "phpmyadmin", label: "PHPMyAdmin", detail: "DB Manager", port: "8080", url: "pma", controllable: true },
 };
 
 const formatBytes = (bytes: number) => {
@@ -23,7 +25,9 @@ const formatBytes = (bytes: number) => {
   return `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
 };
 
-export default function Overview({ status, projects, onNavigate }: OverviewProps) {
+export default function Overview({ status, projects, onNavigate, onRefresh }: OverviewProps) {
+  const [busyService, setBusyService] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const dampContainers = status.containers.filter((c) => c.is_damp);
   const tld = status.tld || "test";
 
@@ -35,6 +39,20 @@ export default function Overview({ status, projects, onNavigate }: OverviewProps
 
   const handleOpen = (url: string) => {
     invoke("open_url", { url });
+  };
+
+  const handleService = async (service: string, action: "start" | "stop") => {
+    setBusyService(service);
+    setMessage(null);
+    try {
+      await invoke("service_action", { service, action });
+      setMessage(`${service}: ${action} complete`);
+      await onRefresh();
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setBusyService(null);
+    }
   };
 
   return (
@@ -49,7 +67,7 @@ export default function Overview({ status, projects, onNavigate }: OverviewProps
           <div className="stat-label">Databases</div>
         </div>
         <div className="stat">
-          <div className="stat-val">{dampContainers.filter((c) => c.status === "running").length}</div>
+          <div className="stat-val">{dampContainers.filter((c) => c.state === "running").length}</div>
           <div className="stat-label">Services Up</div>
         </div>
       </div>
@@ -90,22 +108,24 @@ export default function Overview({ status, projects, onNavigate }: OverviewProps
         <div className="card-header" style={{ marginBottom: 10 }}>
           <span className="card-title">Services</span>
         </div>
+        {message && <div className="inline-status" role="status">{message}</div>}
         <div className="grid-4">
           {Object.entries(SERVICE_INFO).map(([name, info]) => {
             const running = getServiceStatus(name) === "running";
-            const isLink = !!info.url;
             return (
-              <div
-                key={name}
-                className={`service-card ${isLink && running ? "service-card-link" : ""}`}
-                onClick={() => isLink && running && handleOpen(`https://${info.url}.${tld}`)}
-              >
+              <div key={name} className="service-card">
                 <div className={`dot ${running ? "running" : "stopped"}`} />
                 <div className="service-card-info">
                   <div className="service-card-name">{info.label}</div>
                   <div className="service-card-detail">{running ? info.detail : "Offline"}</div>
                 </div>
                 <div className="service-card-port">:{info.port}</div>
+                {info.controllable && (
+                  <button className={`btn btn-sm ${running ? "" : "btn-primary"}`} disabled={busyService === info.id} onClick={() => handleService(info.id, running ? "stop" : "start")}>
+                    {busyService === info.id ? "…" : running ? "Stop" : "Start"}
+                  </button>
+                )}
+                {info.url && running && <button className="btn btn-sm" onClick={() => handleOpen(`https://${info.url}.${tld}`)}>Open</button>}
               </div>
             );
           })}
@@ -145,8 +165,7 @@ export default function Overview({ status, projects, onNavigate }: OverviewProps
             <span className="btn btn-sm btn-primary">View All</span>
           </div>
           {projects.slice(0, 3).map((p) => {
-            const container = status.containers.find((c) => c.name.startsWith(p.name.replace(/-/g, "")) || c.name.startsWith(p.name));
-            const running = container?.state === "running";
+            const running = p.status === "running";
             return (
               <div key={p.path} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
                 <div className={`dot ${running ? "running" : ""}`} />

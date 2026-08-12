@@ -2,13 +2,13 @@
 
 function getServiceInfo(containers) {
   var serviceMap = {
-    'damp-caddy':      { label: 'Caddy',       icon: '🔗',  desc: 'reverseProxy',   url: '' },
-    'damp-db':         { label: 'MySQL 8.4',    icon: '🗄️',  desc: 'databases',      url: '', port: '3306' },
-    'damp-postgres':   { label: 'PostgreSQL 16', icon: '🗄️', desc: 'databases',      url: '', port: '5432' },
-    'damp-redis':      { label: 'Redis 7',      icon: '⚡',  desc: 'cache',          url: '', port: '6379' },
-    'damp-phpmyadmin': { label: 'PHPMyAdmin',   icon: '📊', desc: 'dbManagement',  url: 'https://pma.test' },
-    'damp-mailpit':    { label: 'Mailpit',      icon: '📧', desc: 'emailTesting',  url: 'https://mail.test' },
-    'damp-dashboard':  { label: 'Dashboard',    icon: '◉',  desc: 'DAMP',           url: 'https://damp.test' },
+    'damp-caddy':      { id: 'caddy', label: 'Caddy', desc: 'reverseProxy', url: '' },
+    'damp-db':         { id: 'mysql', label: 'MySQL 8.4', desc: 'databases', url: '', port: '3306' },
+    'damp-postgres':   { id: 'postgres', label: 'PostgreSQL 16', desc: 'databases', url: '', port: '5432' },
+    'damp-redis':      { id: 'redis', label: 'Redis 7', desc: 'cache', url: '', port: '6379' },
+    'damp-phpmyadmin': { id: 'phpmyadmin', label: 'PHPMyAdmin', desc: 'dbManagement', url: 'https://pma.test' },
+    'damp-mailpit':    { id: 'mailpit', label: 'Mailpit', desc: 'emailTesting', url: 'https://mail.test' },
+    'damp-dashboard':  { id: 'dashboard', label: 'Dashboard', desc: 'DAMP', url: 'https://damp.test', controllable: false },
     'damp-dns':        { label: 'DNS',          icon: '🌐', desc: 'dns',           url: '' },
   };
 
@@ -22,12 +22,14 @@ function getServiceInfo(containers) {
     var state = container ? container.state : 'stopped';
     result.push({
       name: key,
+      id: info.id,
       label: info.label,
       icon: info.icon,
       desc: t(info.desc),
       url: info.url,
       port: info.port || '',
-      state: state
+      state: state,
+      controllable: info.controllable !== false
     });
   }
   return result;
@@ -35,18 +37,49 @@ function getServiceInfo(containers) {
 
 function renderServiceGrid(services) {
   return services.map(function(s, i) {
-    return '<a href="' + (s.url || 'javascript:void(0)') + '" ' + (s.url ? 'target="_blank"' : '') + ' class="service-card fade-in stagger-' + (i + 1) + '" data-service="' + s.name + '">' +
+    var running = s.state === 'running';
+    var action = running ? 'stop' : 'start';
+    var control = s.controllable
+      ? '<button class="btn btn-sm ' + (running ? 'btn-danger' : 'btn-primary') + ' service-control" data-service-action="' + s.id + '" onclick="serviceAction(event,\'' + s.id + '\',\'' + action + '\')">' + t(action) + '</button>'
+      : '<span class="service-control-plane">' + t('controlPlane') + '</span>';
+    return '<div class="service-card fade-in stagger-' + (i + 1) + '" data-service="' + s.name + '">' +
         '<div class="service-header">' +
-          '<span class="service-icon">' + s.icon + '</span>' +
           '<span class="dot ' + s.state + '"></span>' +
         '</div>' +
         '<div class="service-name">' + s.label + '</div>' +
         '<div class="service-desc">' + s.desc +
           (s.port ? ' · :' + s.port : '') +
-          (s.url ? ' →' : '') +
         '</div>' +
-      '</a>';
+        '<div class="service-actions">' + control +
+          (s.url && running ? '<a href="' + s.url + '" target="_blank" class="btn btn-sm">' + t('open') + '</a>' : '') +
+        '</div>' +
+      '</div>';
   }).join('');
+}
+
+async function serviceAction(event, service, action) {
+  event.stopPropagation();
+  var btn = event.currentTarget;
+  var original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = action === 'start' ? t('starting') : t('stopping');
+  setActionNotice('', '');
+  try {
+    await api('/api/services/' + service + '/' + action, { method: 'POST' });
+    setActionNotice(t('serviceActionComplete'), 'success');
+    setTimeout(function() { renderOverview(document.getElementById('view')); }, 500);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = original;
+    setActionNotice(e.message, 'error');
+  }
+}
+
+function setActionNotice(message, kind) {
+  var notice = document.getElementById('action-notice');
+  if (!notice) return;
+  notice.textContent = message;
+  notice.className = message ? 'action-notice ' + kind : 'action-notice hidden';
 }
 
 function formatRuntimeBytes(bytes) {
@@ -115,6 +148,7 @@ async function renderOverview(el) {
 
     // Full render for the first time
     el.innerHTML =
+      '<div id="action-notice" class="action-notice hidden" role="status" aria-live="polite"></div>' +
       '<div class="grid-3 fade-in mb-20">' +
         renderStatMini(running, t('containersRunning'), 'running-stat') +
         renderStatMini(projects.length, t('projects'), 'projects-stat') +
@@ -127,8 +161,7 @@ async function renderOverview(el) {
         '<div class="card-header mb-12">' +
           '<span class="card-title font-10 opacity-50">' + t('services') + '</span>' +
           '<div class="container-actions">' +
-            '<button class="btn btn-sm btn-primary" id="btn-engine-up" onclick="engineAction(\'up\')">▶ ' + t('start') + '</button>' +
-            '<button class="btn btn-sm btn-danger" id="btn-engine-down" onclick="engineAction(\'down\')">■ ' + t('stop') + '</button>' +
+            '<button class="btn btn-sm btn-primary" id="btn-engine-up" onclick="engineAction(\'up\')">' + t('startMinimal') + '</button>' +
           '</div>' +
         '</div>' +
         '<div class="service-grid">' +
@@ -192,9 +225,11 @@ async function engineAction(action) {
 
   try {
     await api('/api/engine/' + action, { method: 'POST' });
-    setTimeout(function() { renderOverview(document.getElementById('view')); }, 2000);
+    setActionNotice(t('minimalStarted'), 'success');
+    setTimeout(function() { renderOverview(document.getElementById('view')); }, 500);
   } catch (e) {
     btn.innerHTML = origText;
     btn.disabled = false;
+    setActionNotice(e.message, 'error');
   }
 }

@@ -38,3 +38,21 @@ func TestMemoryPressure(t *testing.T) {
 		}
 	}
 }
+
+func TestBelongsToProject(t *testing.T) {
+	tests := []struct {
+		container, project string
+		want               bool
+	}{
+		{"mancii", "mancii", true},
+		{"mancii-web", "mancii", true},
+		{"mancii-app", "mancii", true},
+		{"mancii2", "mancii", false},
+		{"other-mancii", "mancii", false},
+	}
+	for _, test := range tests {
+		if got := belongsToProject(test.container, test.project); got != test.want {
+			t.Errorf("belongsToProject(%q, %q) = %v, want %v", test.container, test.project, got, test.want)
+		}
+	}
+}
