@@ -808,3 +808,24 @@ select.input {
 .runtime-row.pressure-unbounded, .runtime-row.pressure-warning { border-left-color: var(--yellow); }
 .runtime-row.pressure-critical { border-left-color: var(--red); background: var(--red-bg); }
 .runtime-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+
+.recent-project-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: default;
+}
+.recent-project-row:has(.dot.running) { cursor: pointer; }
+.recent-project-row:has(.dot.running):hover .recent-project-name { color: var(--green); }
+
+.recent-project-name {
+  font-size: 11px;
+  color: var(--text);
+  transition: color 0.1s;
+}
+
+.recent-project-status {
+  font-size: 9px;
+  color: var(--text-muted);
+}

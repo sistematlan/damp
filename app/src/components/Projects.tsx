@@ -96,12 +96,23 @@ export default function Projects({ status, projects, templates, onRefresh }: Pro
 
   const handleDelete = async (p: Project) => {
     if (!confirm(t("confirmDelete"))) return;
-    try { await invoke("delete_project", { name: p.name }); onRefresh(); }
-    catch (e) { setMessage({ text: String(e), type: "error" }); clearMessage(); }
+    try {
+      await invoke("delete_project", { name: p.name });
+      setMessage({ text: `${p.name} deleted`, type: "success" });
+      onRefresh();
+    } catch (e) {
+      setMessage({ text: String(e), type: "error" });
+    }
+    clearMessage();
   };
 
-  const handleOpen = (name: string) => {
-    invoke("open_url", { url: `https://${name}.${tld}` });
+  const handleOpen = async (name: string) => {
+    try {
+      await invoke("open_url", { url: `https://${name}.${tld}` });
+    } catch (e) {
+      setMessage({ text: String(e), type: "error" });
+      clearMessage();
+    }
   };
 
   return (

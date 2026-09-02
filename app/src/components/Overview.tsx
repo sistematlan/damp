@@ -37,8 +37,12 @@ export default function Overview({ status, projects, onNavigate, onRefresh }: Ov
     return c?.state || "";
   };
 
-  const handleOpen = (url: string) => {
-    invoke("open_url", { url });
+  const handleOpen = async (url: string) => {
+    try {
+      await invoke("open_url", { url });
+    } catch (error) {
+      setMessage(String(error));
+    }
   };
 
   const handleService = async (service: string, action: "start" | "stop") => {
@@ -159,18 +163,18 @@ export default function Overview({ status, projects, onNavigate, onRefresh }: Ov
       </div>
 
       {projects.length > 0 && (
-        <div className="card" style={{ cursor: "pointer" }} onClick={() => onNavigate("projects")}>
+        <div className="card">
           <div className="card-header">
             <span className="card-title">Recent Projects</span>
-            <span className="btn btn-sm btn-primary">View All</span>
+            <button className="btn btn-sm btn-primary" onClick={() => onNavigate("projects")}>View All</button>
           </div>
           {projects.slice(0, 3).map((p) => {
             const running = p.status === "running";
             return (
-              <div key={p.path} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+              <div key={p.path} className="recent-project-row" onClick={() => running && handleOpen(`https://${p.name}.${tld}`)}>
                 <div className={`dot ${running ? "running" : ""}`} />
-                <span style={{ fontSize: 11 }}>{p.name}</span>
-                <span style={{ fontSize: 9, color: "var(--text-muted)" }}>{running ? "running" : "stopped"}</span>
+                <span className="recent-project-name">{p.name}</span>
+                <span className="recent-project-status">{running ? "running" : "stopped"}</span>
               </div>
             );
           })}
