@@ -1130,11 +1130,19 @@ case "${1:-help}" in
     echo -e "${GREEN}Updating DAMP...${NC}"
     cd "$DAMP_ROOT_DIR"
     git pull origin main
-    echo -e "${DIM}Rebuilding dashboard...${NC}"
-    cd "$DAMP_CORE_DIR"
-    docker compose build dashboard
-    docker compose up -d --force-recreate
-    echo -e "${GREEN}DAMP updated to $(cat "$DAMP_ROOT_DIR/VERSION" 2>/dev/null || echo "latest").${NC}"
+    new_version=$(cat "$DAMP_ROOT_DIR/VERSION" 2>/dev/null || echo "latest")
+    echo -e "${GREEN}DAMP updated to ${new_version}.${NC}"
+
+    # Check if dashboard or compose files changed
+    if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -qE "(dashboard|docker-compose)"; then
+      echo -e "${DIM}Rebuilding dashboard...${NC}"
+      cd "$DAMP_CORE_DIR"
+      docker compose build dashboard
+      docker compose up -d --force-recreate
+      echo -e "${GREEN}Dashboard rebuilt.${NC}"
+    else
+      echo -e "${DIM}No infrastructure changes. Containers unchanged.${NC}"
+    fi
     ;;
 
   # ── Version ──────────────────────────────────────────────────
