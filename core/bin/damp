@@ -591,7 +591,7 @@ generate_caddyfile() {
 
   cat > "$target/Caddyfile" <<EOF
 {
-	auto_https disable_redirects
+	auto_https off
 	http_port 80
 }
 
@@ -858,14 +858,16 @@ setup_project() {
   local project="$1"
   local target="$2"
   local proxy_port="${3:-80}"
+  local dbname="${4:-}"
   local domain="${project}.${DAMP_TLD}"
-  local dbname="${project//-/_}_db"
 
-  # 1. Create database (skip for projects without DB)
+  # 1. Create database (only if user requested one)
   if [ -n "$dbname" ]; then
     echo -e "${DIM}Creating database '${dbname}'...${NC}"
-    docker exec damp-db mysql -uroot -p"${DB_ROOT_PASSWORD:-root}" \
-      -e "CREATE DATABASE IF NOT EXISTS \`$dbname\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+    if ! docker exec damp-db mysql -uroot -p"${DB_ROOT_PASSWORD:-root}" \
+      -e "CREATE DATABASE IF NOT EXISTS \`$dbname\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null; then
+      echo -e "${YELLOW}⚠ Could not create database '${dbname}' (it may already exist or DB is not ready).${NC}"
+    fi
   fi
 
   # 2. Generate Caddy config in projects.d/
@@ -874,8 +876,8 @@ setup_project() {
   # the HTTP listener is the nginx "<project>-web", not the PHP container).
   local upstream=""
   if [ -f "$target/docker-compose.yml" ]; then
-    upstream=$(grep -E 'container_name:.*-web' "$target/docker-compose.yml" | head -1 | awk '{print $2}')
-    [ -z "$upstream" ] && upstream=$(grep -m1 'container_name:' "$target/docker-compose.yml" | awk '{print $2}')
+    upstream=$(grep -E 'container_name:.*-web' "$target/docker-compose.yml" | head -1 | awk '{print $2}' || true)
+    [ -z "$upstream" ] && upstream=$(grep -m1 'container_name:' "$target/docker-compose.yml" | awk '{print $2}' || true)
   fi
   [ -z "$upstream" ] && upstream="$project"
 
@@ -887,12 +889,22 @@ ${domain} {
 EOF
   echo -e "${DIM}Caddy config created: projects.d/${project}.caddy${NC}"
 
-  # 3. Add host entry (Linux/WSL)
+  # 3. Add host entry (only if wildcard DNS is not configured)
   if ! grep -q "127.0.0.1.*$domain" /etc/hosts 2>/dev/null; then
-    echo -e "${DIM}Adding ${domain} to /etc/hosts (requires sudo)...${NC}"
-    if ! sudo sh -c "printf '\n127.0.0.1   $domain\n' >> /etc/hosts" 2>/dev/null; then
-      echo -e "${YELLOW}Could not update /etc/hosts. Run manually:${NC}"
-      echo -e "  sudo sh -c \"printf '\\\\n127.0.0.1   ${domain}\\\\n' >> /etc/hosts\""
+    # Check if wildcard DNS is configured (dnsmasq, /etc/resolver, etc.)
+    if [ -f "/etc/resolver/${DAMP_TLD}" ] || \
+       [ -d "/etc/dnsmasq.d" ] || \
+       [ -d "$(brew --prefix 2>/dev/null)/etc/dnsmasq.d" ] 2>/dev/null; then
+      echo -e "${DIM}✔ Wildcard DNS configured (*.${DAMP_TLD} → 127.0.0.1)${NC}"
+    else
+      echo -e "${DIM}Adding ${domain} to /etc/hosts...${NC}"
+      if echo "127.0.0.1   $domain" >> /etc/hosts 2>/dev/null; then
+        echo -e "${DIM}✔ Added to /etc/hosts${NC}"
+      else
+        echo -e "${YELLOW}⚠ Could not update /etc/hosts.${NC}"
+        echo -e "${DIM}  Run: damp add-host ${domain}${NC}"
+        echo -e "${DIM}  Or: damp setup-dns (recommended — wildcard DNS for all projects)${NC}"
+      fi
     fi
   fi
 
@@ -901,7 +913,7 @@ EOF
 
   # 4. Reload Caddy to pick up new config
   echo -e "${DIM}Reloading Caddy...${NC}"
-  docker compose up -d caddy --force-recreate >/dev/null 2>&1
+  docker compose up -d caddy --force-recreate >/dev/null 2>&1 || true
 
   # 4b. Clean up residual files that interfere with Docker Compose
   if [ -f "$target/compose.yaml" ]; then
@@ -911,10 +923,39 @@ EOF
 
   # 5. Start project
   echo -e "${DIM}Starting project containers...${NC}"
-  (cd "$target" && docker compose up -d --build --remove-orphans)
+  if ! (cd "$target" && docker compose up -d --build --remove-orphans); then
+    echo -e "${RED}✘ Failed to start project containers. Check docker logs.${NC}"
+    return 1
+  fi
+
+  # 6. Wait for container to be ready
+  echo -e "${DIM}Waiting for container to be ready...${NC}"
+  container_name="$project"
+  # For php-fpm/php-legacy, the web container is the one we should check
+  if [ -f "$target/docker-compose.yml" ]; then
+    web_container=$(grep -E 'container_name:.*-web' "$target/docker-compose.yml" | head -1 | awk '{print $2}' || true)
+    [ -n "$web_container" ] && container_name="$web_container"
+  fi
+
+  max_wait=60
+  waited=0
+  while [ $waited -lt $max_wait ]; do
+    status=$(docker inspect --format='{{.State.Status}}' "$container_name" 2>/dev/null || echo "not_found")
+    if [ "$status" = "running" ]; then
+      break
+    fi
+    sleep 2
+    waited=$((waited + 2))
+  done
 
   echo ""
-  echo -e "${GREEN}${BOLD}✔ Project '${project}' is ready!${NC}"
+  echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════╗${NC}"
+  echo -e "${GREEN}${BOLD}║                                                  ║${NC}"
+  echo -e "${GREEN}${BOLD}║   ¡Bienvenido a DAMP!                            ║${NC}"
+  echo -e "${GREEN}${BOLD}║                                                  ║${NC}"
+  echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════╝${NC}"
+  echo ""
+  echo -e "  ${BOLD}Tu proyecto está listo:${NC}"
   echo ""
   echo -e "  URL       → ${BOLD}https://${domain}${NC}"
   if [ -n "$dbname" ]; then
@@ -922,7 +963,8 @@ EOF
   fi
   echo -e "  Directory → ${BOLD}${target}${NC}"
   echo ""
-  echo -e "  ${DIM}Run ${BOLD}damp trust${NC}${DIM} if you haven't yet (HTTPS without warnings).${NC}"
+  echo -e "  ${DIM}Si es la primera vez, ejecuta ${BOLD}damp trust${NC}${DIM} para HTTPS sin advertencias.${NC}"
+  echo ""
 }
 
 CALLER_DIR="$(pwd)"
@@ -1193,6 +1235,80 @@ case "${1:-help}" in
       exit 1
     fi
 
+    # Pre-flight checks
+    if ! docker info >/dev/null 2>&1; then
+      echo -e "${RED}Docker is not running. Start Docker Desktop and try again.${NC}"
+      exit 1
+    fi
+    if ! docker network inspect damp >/dev/null 2>&1; then
+      echo -e "${YELLOW}DAMP network not found. Run ${BOLD}damp up${NC}${YELLOW} first.${NC}"
+      exit 1
+    fi
+
+    # Verify DNS resolves to 127.0.0.1
+    dns_test="damp-dns-check-$$.${DAMP_TLD}"
+    resolved_ip=$(ping -c 1 -t 1 "$dns_test" 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || echo "")
+    if [ -n "$resolved_ip" ] && [ "$resolved_ip" != "127.0.0.1" ]; then
+      echo -e "${YELLOW}⚠ DNS is resolving *.${DAMP_TLD} to ${resolved_ip} instead of 127.0.0.1${NC}"
+      echo -e "${DIM}  Fix: sudo sed -i '' 's|address=/.${DAMP_TLD}/${resolved_ip}|address=/.${DAMP_TLD}/127.0.0.1|' $(brew --prefix 2>/dev/null)/etc/dnsmasq.d/damp.conf${NC}"
+      echo -e "${DIM}  Then: sudo brew services restart dnsmasq${NC}"
+      echo ""
+    fi
+
+    # Check if project already initialized
+    existing_project=""
+    if [ -f "$target/Dampfile" ]; then
+      existing_project=$(grep 'name:' "$target/Dampfile" 2>/dev/null | head -1 | awk '{print $2}')
+    fi
+    if [ -n "$existing_project" ]; then
+      existing_domain="${existing_project}.${DAMP_TLD}"
+      existing_status=$(docker ps --filter "name=^${existing_project}" --format "{{.Status}}" 2>/dev/null | head -1)
+      echo -e "${BOLD}This project is already registered as '${existing_project}'.${NC}"
+      if [ -n "$existing_status" ]; then
+        echo -e "${DIM}Container: ${existing_status}${NC}"
+      fi
+      echo -e "${DIM}URL: https://${existing_domain}${NC}"
+      echo ""
+      echo -e "  ${BOLD}1)${NC} Use existing — start/restart the container"
+      echo -e "  ${BOLD}2)${NC} Reinitialize — regenerate all files"
+      echo -e "  ${BOLD}3)${NC} Cancel"
+      echo ""
+      choice=$(read_input "Select [1-3]: " "1")
+      case "$choice" in
+        1)
+          echo -e "${DIM}Starting ${existing_project}...${NC}"
+          if [ -n "$existing_status" ]; then
+            docker restart "$existing_project" 2>/dev/null || true
+          else
+            (cd "$target" && docker compose up -d --build --remove-orphans) || true
+          fi
+          echo ""
+          echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════╗${NC}"
+          echo -e "${GREEN}${BOLD}║                                                  ║${NC}"
+          echo -e "${GREEN}${BOLD}║   ¡Bienvenido a DAMP!                            ║${NC}"
+          echo -e "${GREEN}${BOLD}║                                                  ║${NC}"
+          echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════╝${NC}"
+          echo ""
+          echo -e "  ${BOLD}Tu proyecto está listo:${NC}"
+          echo ""
+          echo -e "  URL       → ${BOLD}https://${existing_domain}${NC}"
+          echo -e "  Directory → ${BOLD}${target}${NC}"
+          echo ""
+          exit 0
+          ;;
+        2)
+          echo -e "${DIM}Reinitializing...${NC}"
+          if [ -n "$existing_status" ]; then
+            docker stop "$existing_project" 2>/dev/null || true
+          fi
+          ;;
+        *)
+          echo "Cancelled."
+          exit 0
+          ;;
+      esac
+    fi
+
     echo ""
     echo -e "${BOLD}DAMP Init — Interactive Project Setup${NC}"
     echo -e "${DIM}Press Enter to accept defaults.${NC}"
@@ -1252,14 +1368,27 @@ case "${1:-help}" in
       dbname=""
     fi
 
-    # 5. Check for existing Dampfile
-    if [ -f "$target/Dampfile" ]; then
-      echo -e "${YELLOW}A Dampfile already exists in this directory.${NC}"
-      overwrite_all=$(read_input "Overwrite all generated files? [y/N]: " "")
-      if [ "$overwrite_all" != "y" ] && [ "$overwrite_all" != "Y" ]; then
-        echo "Cancelled."
-        exit 0
-      fi
+    # 5. Summary
+    domain="${project}.${DAMP_TLD}"
+    echo ""
+    echo -e "${BOLD}Configuration:${NC}"
+    echo -e "  Project  → ${BOLD}${project}${NC}"
+    echo -e "  Type     → ${BOLD}${template}${NC}"
+    echo -e "  URL      → ${BOLD}https://${domain}${NC}"
+    if [ "$template" = "frankenphp" ] || [ "$template" = "php-fpm" ] || [ "$template" = "php-legacy" ] || [ "$template" = "php-ancient" ]; then
+      echo -e "  PHP      → ${BOLD}${php_version}${NC}"
+      echo -e "  Root     → ${BOLD}${document_root}${NC}"
+    elif [ "$template" = "node" ]; then
+      echo -e "  Port     → ${BOLD}${node_port}${NC}"
+    fi
+    if [ -n "$dbname" ]; then
+      echo -e "  Database → ${BOLD}${dbname}${NC}"
+    fi
+    echo ""
+    confirm_setup=$(read_input "Proceed? [Y/n]: " "Y")
+    if [ "$confirm_setup" = "n" ] || [ "$confirm_setup" = "N" ]; then
+      echo "Cancelled."
+      exit 0
     fi
 
     # 6. Generate Dampfile
@@ -1300,14 +1429,11 @@ case "${1:-help}" in
         ;;
     esac
 
-    echo ""
-    echo -e "${GREEN}${BOLD}✔ Project '${project}' configured with Dampfile.${NC}"
-
     # 9. Auto-setup: DB, Caddy, hosts, start
     if [ "$template" = "node" ]; then
-      setup_project "$project" "$target" "$node_port"
+      setup_project "$project" "$target" "$node_port" "$dbname"
     else
-      setup_project "$project" "$target"
+      setup_project "$project" "$target" "80" "$dbname"
     fi
     ;;
 
@@ -1387,7 +1513,8 @@ case "${1:-help}" in
     echo -e "${GREEN}Project '$project' created from template '${template}'.${NC}"
 
     # Auto-setup: DB, Caddy, hosts, start
-    setup_project "$project" "$target"
+    default_db="${project//-/_}_db"
+    setup_project "$project" "$target" "80" "$default_db"
     ;;
 
   # ── List projects ─────────────────────────────────────────────

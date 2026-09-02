@@ -1,5 +1,5 @@
 {
-	auto_https disable_redirects
+	auto_https off
 	http_port 80
 }
 
