@@ -7,7 +7,7 @@ RUN apk add --no-cache \
     libjpeg-turbo-dev freetype-dev oniguruma-dev
 
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) \
+    && docker-php-ext-install -j2 \
     intl pdo_mysql mysqli zip gd exif opcache mbstring
 
 # Composer

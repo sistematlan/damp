@@ -463,7 +463,7 @@ RUN apt-get update && apt-get install -y \\
     && rm -rf /var/lib/apt/lists/*
 
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \\
-    && docker-php-ext-install -j\$(nproc) \\
+    && docker-php-ext-install -j2 \\
     intl pdo_mysql mysqli zip gd exif opcache mbstring
 
 COPY Caddyfile /etc/caddy/Caddyfile
@@ -483,7 +483,7 @@ RUN apk add --no-cache \\
     libjpeg-turbo-dev freetype-dev oniguruma-dev
 
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \\
-    && docker-php-ext-install -j\$(nproc) \\
+    && docker-php-ext-install -j2 \\
     intl pdo_mysql mysqli zip gd exif opcache mbstring
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -506,7 +506,7 @@ RUN apk add --no-cache \\
     libjpeg-turbo-dev freetype-dev oniguruma-dev
 
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \\
-    && docker-php-ext-install -j\$(nproc) \\
+    && docker-php-ext-install -j2 \\
     intl pdo_mysql mysqli zip gd exif opcache mbstring
 
 COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
@@ -527,7 +527,7 @@ WORKDIR /var/www/html
 RUN apt-get update && apt-get install -y \\
     libpng-dev libjpeg-dev libfreetype6-dev \\
     && docker-php-ext-configure gd --with-freetype --with-jpeg \\
-    && docker-php-ext-install -j\$(nproc) gd mysql mysqli pdo_mysql \\
+    && docker-php-ext-install -j2 gd mysql mysqli pdo_mysql \\
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN a2enmod rewrite
