@@ -156,6 +156,13 @@ damp init
 6. **Creates** the database
 7. **Starts** the containers
 
+PHP is temporarily limited to **8.4.x or older**: `damp init` rejects newer
+versions before generating project files, and new WordPress projects use the
+`wordpress:php8.4-apache` image. PHP 8.5 bundles OPcache, which is incompatible
+with DAMP's current extension installation step. Existing project files are
+not migrated automatically; projects using PHP 8.5 should switch their
+`Dampfile` and Dockerfile base image to PHP 8.4 before rebuilding.
+
 ### New project from scratch (legacy templates)
 
 ```bash

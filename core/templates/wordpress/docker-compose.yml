@@ -12,7 +12,7 @@
 
 services:
   app:
-    image: wordpress:latest
+    image: wordpress:php8.4-apache
     container_name: PROJECT_NAME-app
     restart: unless-stopped
     mem_limit: 512m
