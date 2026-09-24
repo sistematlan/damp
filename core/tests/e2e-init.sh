@@ -156,6 +156,52 @@ test_php84_default() {
   rm -rf "$tmpdir"
 }
 
+# ── Test: Temporary PHP version ceiling ────────────────────────
+test_php_version_limit() {
+  echo -e "\n${BOLD}Test: PHP version limit${NC}"
+
+  local version tmpdir ptype output
+  for version in 5.6 7.4 8.1 8.2 8.3 8.4 8.4.25; do
+    if run_fn validate_php_version "$version"; then
+      pass "Accepts PHP $version"
+    else
+      fail "Rejects supported PHP $version"
+    fi
+  done
+
+  for version in 8.5 8.5.0 8.6 8.10 9.0 latest 8.4-rc ''; do
+    if output=$(run_fn validate_php_version "$version" 2>&1); then
+      fail "Accepts unsupported PHP '$version'"
+    elif [[ "$output" == *"8.4"* ]]; then
+      pass "Rejects PHP '$version' with the supported limit"
+    else
+      fail "Missing version guidance for PHP '$version'"
+    fi
+  done
+
+  tmpdir=$(mktemp -d)
+  for ptype in frankenphp php-fpm php-legacy php-ancient; do
+    echo 'existing Dockerfile' > "$tmpdir/Dockerfile"
+    if run_fn generate_dockerfile "$tmpdir" "$ptype" "8.5" 2>/dev/null; then
+      fail "$ptype generates a Dockerfile for PHP 8.5"
+    elif [ "$(cat "$tmpdir/Dockerfile")" = 'existing Dockerfile' ]; then
+      pass "$ptype rejects PHP 8.5 without overwriting Dockerfile"
+    else
+      fail "$ptype modifies Dockerfile before rejecting PHP 8.5"
+    fi
+
+    echo 'existing Dampfile' > "$tmpdir/Dampfile"
+    if run_fn generate_dampfile "$tmpdir" "test" "$ptype" "8.5" "public" "test_db" "" 2>/dev/null; then
+      fail "$ptype generates a Dampfile for PHP 8.5"
+    elif [ "$(cat "$tmpdir/Dampfile")" = 'existing Dampfile' ]; then
+      pass "$ptype rejects PHP 8.5 without overwriting Dampfile"
+    else
+      fail "$ptype modifies Dampfile before rejecting PHP 8.5"
+    fi
+  done
+  rm -rf "$tmpdir"
+}
+
 # ── Test: Dockerfile generation per template ───────────────────
 test_dockerfile_generation() {
   echo -e "\n${BOLD}Test: Dockerfile generation${NC}"
@@ -273,13 +319,19 @@ test_docker_compose_generation() {
   rm -f "$tmpdir/docker-compose.yml"
   run_fn generate_docker_compose "$tmpdir" "test-wp" "wordpress" "test_wp_db" ""
   if [ -f "$tmpdir/docker-compose.yml" ]; then
-    if grep -q 'wordpress:latest' "$tmpdir/docker-compose.yml"; then
-      pass "WordPress compose uses wordpress:latest"
+    if grep -q 'wordpress:php8.4-apache' "$tmpdir/docker-compose.yml"; then
+      pass "WordPress compose pins PHP 8.4"
     else
       fail "WordPress compose has wrong image"
     fi
   else
     fail "WordPress docker-compose.yml not generated"
+  fi
+
+  if grep -q 'wordpress:php8.4-apache' "$TEMPLATES_DIR/wordpress/docker-compose.yml"; then
+    pass "WordPress template pins PHP 8.4"
+  else
+    fail "WordPress template does not pin PHP 8.4"
   fi
 
   rm -rf "$tmpdir"
@@ -548,6 +600,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 test_caddyfile_auto_https_off
 test_php84_default
+test_php_version_limit
 test_dockerfile_generation
 test_docker_compose_generation
 test_dampfile_generation

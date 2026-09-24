@@ -137,6 +137,21 @@ detect_php_version() {
   fi
 }
 
+# ── Validate PHP version before generating project files ───────
+validate_php_version() {
+  local version="$1"
+  if [[ ! "$version" =~ ^([0-9]+)\.([0-9]+)(\.[0-9]+)?$ ]]; then
+    echo "Invalid PHP version '$version'. Use a numeric version such as 8.4 (temporary maximum: 8.4)." >&2
+    return 1
+  fi
+
+  # PHP 8.5 bundles OPcache; our extension build still installs it separately.
+  if (( 10#${BASH_REMATCH[1]} > 8 || (10#${BASH_REMATCH[1]} == 8 && 10#${BASH_REMATCH[2]} > 4) )); then
+    echo "PHP $version is not supported yet. DAMP temporarily supports PHP up to 8.4; choose 8.4 or an older version." >&2
+    return 1
+  fi
+}
+
 # ── Detect document root ───────────────────────────────────────
 detect_document_root() {
   local dir="$1"
@@ -182,6 +197,12 @@ generate_dampfile() {
   local dbname="$6"
   local node_port="${7:-}"
   local domain="${project}.${DAMP_TLD}"
+
+  case "$ptype" in
+    frankenphp|php-fpm|php-legacy|php-ancient)
+      validate_php_version "$php_ver" || return 1
+      ;;
+  esac
 
   cat > "$target/Dampfile" <<EOF
 # Dampfile v1.0
@@ -418,7 +439,7 @@ EOF
 name: ${project}
 services:
   app:
-    image: wordpress:latest
+    image: wordpress:php8.4-apache
     container_name: ${project}
     hostname: ${project}
     restart: unless-stopped
@@ -449,6 +470,8 @@ generate_dockerfile() {
   local target="$1"
   local ptype="$2"
   local php_ver="$3"
+
+  validate_php_version "$php_ver" || return 1
 
   case "$ptype" in
     frankenphp)
@@ -1351,7 +1374,8 @@ case "${1:-help}" in
     node_cmd=""
     if [ "$template" = "frankenphp" ] || [ "$template" = "php-fpm" ] || [ "$template" = "php-legacy" ] || [ "$template" = "php-ancient" ]; then
       detected_php=$(detect_php_version "$target")
-      php_version=$(read_input "PHP version [${detected_php}]: " "$detected_php")
+      php_version=$(read_input "PHP version (max 8.4) [${detected_php}]: " "$detected_php")
+      validate_php_version "$php_version" || exit 1
 
       detected_root=$(detect_document_root "$target" "$template")
       document_root=$(read_input "Document root [${detected_root}]: " "$detected_root")
